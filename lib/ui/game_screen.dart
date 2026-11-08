@@ -4,15 +4,14 @@ import '../engine/ai.dart';
 import '../engine/model.dart';
 import '../game/controller.dart';
 import 'card_view.dart';
+import 'scoreboard.dart';
 import 'theme.dart';
 
-const _typeName = {
-  'human': 'Human',
-  'remote': 'Online',
-  'easy': 'CPU · Easy',
-  'medium': 'CPU · Medium',
-  'hard': 'CPU · Hard',
-};
+String typeLabel(String t) {
+  if (t == 'human') return 'Human';
+  if (t == 'remote') return 'Online';
+  return kPersonas[t]?.title ?? 'Computer';
+}
 
 const _kindTitle = {
   'freeze': 'Who gets frozen?',
@@ -75,6 +74,8 @@ class _GameScreenState extends State<GameScreen> {
               }
               return Column(children: [
                 _topBar(s),
+                Scoreboard(state: s, myClientId: widget.myClientId),
+                const SizedBox(height: 10),
                 Expanded(child: _table(s)),
                 _bottom(s),
               ]);
@@ -174,7 +175,7 @@ class _GameScreenState extends State<GameScreen> {
             child: Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text(p.name + (_isMine(p) ? ' (you)' : ''),
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text(_typeName[p.type] ?? p.type, style: const TextStyle(color: C.inkSoft, fontSize: 11)),
+              Text(typeLabel(p.type), style: const TextStyle(color: C.inkSoft, fontSize: 11)),
               if (isTurn) _pill('Turn', C.saffron),
               if (h.status == PStatus.stayed) _pill('Stayed', C.stock),
               if (h.status == PStatus.bust) _pill('Busted', C.coral),
@@ -185,6 +186,7 @@ class _GameScreenState extends State<GameScreen> {
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (leaders(s).contains(i)) const Crown(size: 20),
             Text('${p.total}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, height: 1)),
             Text('of ${s.target}', style: const TextStyle(color: C.inkSoft, fontSize: 11)),
           ]),

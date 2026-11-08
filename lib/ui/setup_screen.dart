@@ -31,11 +31,27 @@ class TargetPicker extends StatelessWidget {
       ]);
 }
 
-const cpuTypes = {
-  'easy': 'CPU · Easy',
-  'medium': 'CPU · Medium',
-  'hard': 'CPU · Hard',
+/// Computer characters, as "Name · Title".
+final Map<String, String> cpuTypes = {
+  for (final e in kPersonas.entries) e.key: '${e.value.name} · ${e.value.title}',
 };
+
+/// A persona's name, numbered if that name is already taken.
+String personaName(String type, Iterable<String> taken) {
+  final base = kPersonas[type]?.name ?? 'CPU';
+  if (!taken.contains(base)) return base;
+  var n = 2;
+  while (taken.contains('$base $n')) {
+    n++;
+  }
+  return '$base $n';
+}
+
+bool _isDefaultCpuName(String name) {
+  final t = name.trim();
+  if (t.isEmpty || t.startsWith('CPU')) return true;
+  return kPersonas.values.any((p) => t == p.name || t.startsWith('${p.name} '));
+}
 
 class LocalSetupScreen extends StatefulWidget {
   const LocalSetupScreen({super.key});
@@ -46,8 +62,8 @@ class LocalSetupScreen extends StatefulWidget {
 class _LocalSetupScreenState extends State<LocalSetupScreen> {
   final seats = <SeatDraft>[
     SeatDraft('You', 'human'),
-    SeatDraft('CPU 1', 'medium'),
-    SeatDraft('CPU 2', 'hard'),
+    SeatDraft('Rocky', 'rocky'),
+    SeatDraft('Vex', 'vex'),
   ];
   int target = 200;
   bool fast = false;
@@ -88,7 +104,13 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                   ),
                   IconButton.outlined(
                     onPressed: seats.length < 8
-                        ? () => setState(() => seats.add(SeatDraft('CPU ${seats.length}', 'medium')))
+                        ? () => setState(() {
+                              final keys = kPersonas.keys.toList();
+                              final used = seats.map((x) => x.type).toSet();
+                              final type = keys.firstWhere((k) => !used.contains(k),
+                                  orElse: () => keys[seats.length % keys.length]);
+                              seats.add(SeatDraft(personaName(type, seats.map((x) => x.name.text)), type));
+                            })
                         : null,
                     icon: const Icon(Icons.add),
                   ),
@@ -101,8 +123,10 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                 const SizedBox(height: 12),
                 for (var i = 0; i < seats.length; i++)
                   Padding(
+                    key: ObjectKey(seats[i]),
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(children: [
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
                       SizedBox(
                         width: 28,
                         child: Text('${i + 1}',
@@ -114,13 +138,28 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                         width: 160,
                         child: DropdownButtonFormField<String>(
                           initialValue: seats[i].type,
-                          items: const [
-                            DropdownMenuItem(value: 'human', child: Text('Human')),
-                            DropdownMenuItem(value: 'easy', child: Text('CPU · Easy')),
-                            DropdownMenuItem(value: 'medium', child: Text('CPU · Medium')),
-                            DropdownMenuItem(value: 'hard', child: Text('CPU · Hard')),
+                          items: [
+                            const DropdownMenuItem(value: 'human', child: Text('Human')),
+                            for (final e in kPersonas.entries)
+                              DropdownMenuItem(value: e.key, child: Text(e.value.name)),
                           ],
-                          onChanged: (v) => setState(() => seats[i].type = v ?? 'human'),
+                          onChanged: (v) => setState(() {
+                            final type = v ?? 'human';
+                            seats[i].type = type;
+                            if (type != 'human' && _isDefaultCpuName(seats[i].name.text)) {
+                              final others = [for (var k = 0; k < seats.length; k++) if (k != i) seats[k].name.text];
+                              seats[i].name.text = personaName(type, others);
+                            }
+                          }),
+                        ),
+                      ),
+                    ]),
+                    if (kPersonas[seats[i].type] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 28, top: 4),
+                        child: Text(
+                          '${kPersonas[seats[i].type]!.title}: ${kPersonas[seats[i].type]!.blurb}',
+                          style: const TextStyle(color: C.inkSoft, fontSize: 12),
                         ),
                       ),
                     ]),

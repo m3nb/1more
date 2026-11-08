@@ -115,6 +115,43 @@ void main() {
       expect(e.s.players[1].hand.status, PStatus.frozen);
     });
 
+    test('Freeze skips players who stayed, and lands on the drawer when alone', () {
+      final e = rigged([n(1, 3), n(2, 4), n(3, 5), n(4, 6), const GameCard(5, CardType.freeze)], players: 3);
+      e.apply(0, 'draw');
+      e.apply(1, 'draw');
+      e.apply(2, 'draw');
+      e.apply(0, 'stay');
+      e.apply(1, 'draw'); // 6
+      e.apply(2, 'stay');
+      e.apply(1, 'draw'); // Freeze: only player 1 is still in
+      expect(e.s.pending, isNull);
+      expect(e.s.players[1].hand.status, PStatus.frozen);
+      expect(e.s.players[0].hand.status, PStatus.stayed);
+    });
+
+    test('Freeze target list never includes a player who stayed', () {
+      final e = rigged([n(1, 3), n(2, 4), n(3, 5), const GameCard(4, CardType.freeze)], players: 3);
+      e.apply(0, 'draw');
+      e.apply(1, 'draw');
+      e.apply(2, 'draw');
+      e.apply(0, 'stay');
+      e.apply(1, 'draw'); // Freeze: players 1 and 2 are still in
+      expect(e.s.pending!.kind, 'freeze');
+      expect(e.s.pending!.candidates, [1, 2]);
+    });
+
+    test('Negative skips players who stayed, and lands on the drawer when alone', () {
+      final e = rigged([n(1, 3), n(2, 4), n(3, 5), const GameCard(4, CardType.neg)], players: 2);
+      e.apply(0, 'draw'); // 3
+      e.apply(1, 'draw'); // 4
+      e.apply(0, 'stay');
+      e.apply(1, 'draw'); // 5
+      e.apply(1, 'draw'); // Negative: only player 1 is still in
+      expect(e.s.pending, isNull);
+      expect(e.s.players[1].hand.neg, isTrue);
+      expect(e.s.players[0].hand.neg, isFalse);
+    });
+
     test('Flip 3 draws three cards for the target', () {
       final e = rigged([n(1, 1), const GameCard(2, CardType.flip3), n(3, 3), n(4, 4), n(5, 5)]);
       e.apply(0, 'draw'); // 1
@@ -133,9 +170,48 @@ void main() {
     });
   });
 
+  group('characters', () {
+    GameState table(String chooser) => GameState(
+          players: [
+            Player(name: 'Bot', type: chooser),
+            Player(name: 'Me', type: 'human', total: 20, hand: RoundHand(nums: [n(1, 9)])),
+            Player(name: 'Top', type: 'sage', total: 150, hand: RoundHand(nums: [n(2, 5)])),
+          ],
+          target: 200,
+          deck: buildDeck(Random(2)),
+        );
+    int pick(GameState s, String kind) {
+      s.pending = Decision(DType.target, 0, kind: kind, candidates: [0, 1, 2], card: const GameCard(99, CardType.neg));
+      return decideAi(s, Random(1)).target!;
+    }
+
+    test('Hex aims at the real player', () {
+      expect(pick(table('hex'), 'neg'), 1);
+      expect(pick(table('hex'), 'flip3'), 1);
+    });
+
+    test('Vex aims at the leader', () {
+      expect(pick(table('vex'), 'neg'), 2);
+      expect(pick(table('vex'), 'flip3'), 2);
+    });
+
+    test('Rocky keeps drawing where Sage stops', () {
+      GameState hand(String type) => GameState(
+            players: [
+              Player(name: 'A', type: type, hand: RoundHand(nums: [n(1, 12), n(2, 11), n(3, 10)], drawn: 3)),
+              Player(name: 'B', type: 'sage'),
+            ],
+            target: 200,
+            deck: buildDeck(Random(4)),
+          )..pending = const Decision(DType.turn, 0);
+      expect(decideAi(hand('rocky'), Random(1)).type, 'draw');
+      expect(decideAi(hand('sage'), Random(1)).type, 'stay');
+    });
+  });
+
   test('state survives a JSON round trip', () {
     final e = Engine.newGame(
-      [Player(name: 'A', type: 'human'), Player(name: 'B', type: 'hard')],
+      [Player(name: 'A', type: 'human'), Player(name: 'B', type: 'sage')],
       250,
       rng: Random(5),
     );
@@ -147,7 +223,8 @@ void main() {
     for (var seed = 0; seed < 60; seed++) {
       final rng = Random(seed);
       final players = [
-        for (var i = 0; i < 2 + seed % 7; i++) Player(name: 'C$i', type: ['easy', 'medium', 'hard'][i % 3])
+        for (var i = 0; i < 2 + seed % 7; i++)
+          Player(name: 'C$i', type: i == 0 && seed.isEven ? 'human' : ['rocky', 'sage', 'vex', 'hex'][i % 4])
       ];
       final e = Engine.newGame(players, kTargets[seed % kTargets.length], rng: rng);
       var steps = 0;

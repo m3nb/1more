@@ -249,7 +249,7 @@ class Engine {
         break;
       case CardType.neg:
         _log('${p.name} drew Negative.');
-        _ask(i, 'neg', [for (var k = 0; k < n; k++) if (s.players[k].hand.status != PStatus.bust) k], c);
+        _ask(i, 'neg', [for (var k = 0; k < n; k++) if (s.players[k].hand.active) k], c);
         break;
       case CardType.flip3:
         _log('${p.name} drew Flip 3.');

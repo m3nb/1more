@@ -40,7 +40,8 @@ int _withCard(RoundHand h, GameCard c) {
   return scoreOf(copy).value;
 }
 
-double _expectedGain(GameState s, int i) {
+/// Average change in round points from one more draw.
+double expectedGain(GameState s, int i) {
   final h = s.players[i].hand;
   final v = scoreOf(h).value;
   final pool = drawPool(s);
@@ -63,32 +64,45 @@ double _expectedGain(GameState s, int i) {
   return total / pool.length;
 }
 
+// ---------------------------------------------------------------- draw / stay
+
 bool _wantsToDraw(GameState s, int i) {
   final p = s.players[i];
   final h = p.hand;
   final v = valueOf(s, i);
   if (h.drawn == 0) return true;
+  // A Negative makes every new card cost points, so everyone stops.
+  if (h.neg) return false;
 
   var othersBest = 0;
   for (var k = 0; k < s.players.length; k++) {
     if (k == i) continue;
     othersBest = max(othersBest, s.players[k].total + max(0, valueOf(s, k)));
   }
-  if (p.type != 'easy' && v > 0 && p.total + v >= s.target && p.total + v > othersBest) return false;
+  final winsNow = v > 0 && p.total + v >= s.target && p.total + v > othersBest;
 
   switch (p.type) {
-    case 'easy':
-      if (h.neg) return false;
-      if (h.sc > 0) return v < 40;
-      return v < 14 + Random().nextInt(16);
-    case 'medium':
-      if (h.neg) return false;
+    case 'rocky':
+      // The gambler: only a near-certain bust or a big pile stops him.
+      if (winsNow && v >= 30) return false;
+      if (h.sc > 0) return v < 75;
+      return v < 48 && dupChance(s, i) < 0.5;
+    case 'sage':
+      if (winsNow) return false;
+      // Patient when ahead, a little braver when far behind.
+      final leaderTotal = s.players.map((q) => q.total).reduce(max);
+      final gap = leaderTotal - p.total;
+      final bar = gap > s.target * 0.3 ? -1.5 : (p.total >= leaderTotal ? 1.0 : 0.0);
+      return expectedGain(s, i) > bar;
+    default:
+      // The hunters play a steady middle game; their fun is in the targeting.
+      if (winsNow) return false;
       if (h.sc > 0) return v < 55;
       return dupChance(s, i) < 0.3 && v < 34;
-    default:
-      return _expectedGain(s, i) > 0;
   }
 }
+
+// ---------------------------------------------------------------- targeting
 
 int _best(List<int> list, double Function(int) score) {
   var best = list.first;
@@ -103,25 +117,16 @@ int _best(List<int> list, double Function(int) score) {
   return best;
 }
 
-int _pickTarget(GameState s, Decision d, Random rng) {
+/// The careful choice, used by Sage and as everyone's fallback.
+int _strategicTarget(GameState s, Decision d) {
   final me = d.player;
-  final p = s.players[me];
   final cands = d.candidates;
   final opp = cands.where((k) => k != me).toList();
-
-  if (p.type == 'easy') {
-    final pool = opp.isNotEmpty ? opp : cands;
-    return pool[rng.nextInt(pool.length)];
-  }
   switch (d.kind) {
     case 'give':
       return _best(opp.isNotEmpty ? opp : cands, (k) => -s.players[k].total.toDouble());
     case 'freeze':
-      if (p.type == 'hard' &&
-          cands.contains(me) &&
-          valueOf(s, me) >= 25 &&
-          dupChance(s, me) > 0.3 &&
-          p.hand.sc == 0) {
+      if (cands.contains(me) && valueOf(s, me) >= 25 && dupChance(s, me) > 0.3 && s.players[me].hand.sc == 0) {
         return me;
       }
       if (opp.isEmpty) return me;
@@ -141,6 +146,89 @@ int _pickTarget(GameState s, Decision d, Random rng) {
       });
   }
   return opp.isNotEmpty ? opp.first : cands.first;
+}
+
+/// Vex: everything goes at the player with the highest total.
+int? _vexTarget(GameState s, Decision d) {
+  final me = d.player;
+  final opp = d.candidates.where((k) => k != me).toList();
+  if (opp.isEmpty) return null;
+  // Leaders first: highest total, then highest round points.
+  opp.sort((a, b) {
+    final t = s.players[b].total - s.players[a].total;
+    return t != 0 ? t : valueOf(s, b) - valueOf(s, a);
+  });
+  final leader = opp.first;
+  switch (d.kind) {
+    case 'neg':
+      // A Negative only hurts someone with positive points.
+      for (final k in opp) {
+        if (valueOf(s, k) > 0) return k;
+      }
+      return null;
+    case 'flip3':
+      return leader;
+    case 'freeze':
+      // Freezing locks points in, so only freeze a leader who has little yet.
+      return valueOf(s, leader) <= 15 ? leader : null;
+    case 'give':
+      return opp.last; // never helps the leader
+  }
+  return null;
+}
+
+/// Hex: action cards go to the real people at the table.
+int? _hexTarget(GameState s, Decision d) {
+  final me = d.player;
+  final people = d.candidates.where((k) => k != me && s.players[k].isPerson).toList();
+  switch (d.kind) {
+    case 'neg':
+      final hurt = people.where((k) => valueOf(s, k) > 0).toList();
+      return hurt.isEmpty ? null : _best(hurt, (k) => valueOf(s, k).toDouble());
+    case 'flip3':
+      if (people.isEmpty) return null;
+      return _best(people, (k) => dupChance(s, k) * 100 + valueOf(s, k) * 0.2);
+    case 'freeze':
+      if (people.isEmpty) return null;
+      return _best(people, (k) => -valueOf(s, k).toDouble());
+    case 'give':
+      final bots = d.candidates.where((k) => k != me && s.players[k].isCpu).toList();
+      return bots.isEmpty ? null : bots.first;
+  }
+  return null;
+}
+
+/// Rocky: big swings, sometimes at himself.
+int? _rockyTarget(GameState s, Decision d, Random rng) {
+  final me = d.player;
+  final opp = d.candidates.where((k) => k != me).toList();
+  switch (d.kind) {
+    case 'flip3':
+      // Three free cards sound great to a gambler.
+      if (d.candidates.contains(me) && dupChance(s, me) < 0.2) return me;
+      return null;
+    case 'freeze':
+    case 'give':
+      return opp.isEmpty ? null : opp[rng.nextInt(opp.length)];
+  }
+  return null;
+}
+
+int _pickTarget(GameState s, Decision d, Random rng) {
+  int? pick;
+  switch (s.players[d.player].type) {
+    case 'vex':
+      pick = _vexTarget(s, d);
+      break;
+    case 'hex':
+      pick = _hexTarget(s, d);
+      break;
+    case 'rocky':
+      pick = _rockyTarget(s, d, rng);
+      break;
+  }
+  if (pick != null && d.candidates.contains(pick)) return pick;
+  return _strategicTarget(s, d);
 }
 
 AiMove decideAi(GameState s, Random rng) {

@@ -24,7 +24,7 @@ String normalizeCode(String raw) => raw.trim().toUpperCase().replaceAll(RegExp(r
 
 class LobbySeat {
   final String name;
-  final String type; // human (host), remote, easy, medium, hard
+  final String type; // human (host), remote, or a persona key
   final String? cid;
   const LobbySeat(this.name, this.type, [this.cid]);
 
@@ -113,10 +113,15 @@ class OnlineSession extends ChangeNotifier {
   Future<void> _sendLobby() =>
       link.send('lobby', {'seats': seats.map((s) => s.toJson()).toList(), 'target': target});
 
-  void addCpu(String level) {
+  void addCpu(String persona) {
     if (!isHost || started || seats.length >= 8) return;
-    final n = seats.where((s) => s.cid == null).length + 1;
-    seats.add(LobbySeat('CPU $n', level));
+    final base = kPersonas[persona]?.name ?? 'CPU';
+    final taken = seats.map((s) => s.name).toSet();
+    var name = base;
+    for (var n = 2; taken.contains(name); n++) {
+      name = '$base $n';
+    }
+    seats.add(LobbySeat(name, persona));
     _sendLobby();
     _notify();
   }
@@ -268,7 +273,7 @@ class HostController extends EngineController {
 
   @override
   void takeOverSeat(int i) {
-    engine.setPlayerType(i, 'medium');
+    engine.setPlayerType(i, 'sage');
     changed();
   }
 

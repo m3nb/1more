@@ -176,6 +176,7 @@ class _Rules extends StatelessWidget {
     'If you have a Negative and draw a duplicate, you don\'t score 0: your total before the duplicate is deducted from your score.',
     'Flip 3: pick a player (or yourself) to draw 3 cards in a row. Any action card among them is played right away.',
     'Freeze: the frozen player leaves the round with their current points.',
+    'Freeze and Negative only go to players still in the round. If you\'re the only one left, they land on you.',
     'After seven numbers you may keep going. A duplicate after that loses the whole round, bonus included.',
     'When someone reaches the target at the end of a round, the highest total wins.',
   ];

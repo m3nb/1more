@@ -100,8 +100,23 @@ class RoundHand {
   }
 }
 
+/// A computer character with its own way of playing.
+class Persona {
+  final String name;
+  final String title;
+  final String blurb;
+  const Persona(this.name, this.title, this.blurb);
+}
+
+const Map<String, Persona> kPersonas = {
+  'rocky': Persona('Rocky', 'The Gambler', 'Loves the risk. Keeps drawing long after he should stop.'),
+  'sage': Persona('Sage', 'The Strategist', 'Calm and patient. Works out the odds and wins slowly.'),
+  'vex': Persona('Vex', 'The Leader Hunter', 'Goes after whoever is winning with every action card.'),
+  'hex': Persona('Hex', 'The Human Hunter', 'Saves his Negatives, Freezes and Flip 3s for real players.'),
+};
+
 /// Player types: human (on this device), remote (another device),
-/// easy / medium / hard (computer).
+/// or a persona key from [kPersonas] (computer).
 class Player {
   String name;
   String type;
@@ -112,7 +127,8 @@ class Player {
   Player({required this.name, required this.type, this.clientId, this.total = 0, RoundHand? hand})
       : hand = hand ?? RoundHand();
 
-  bool get isCpu => type == 'easy' || type == 'medium' || type == 'hard';
+  bool get isCpu => type != 'human' && type != 'remote';
+  bool get isPerson => !isCpu;
 
   Map<String, dynamic> toJson() => {
         'name': name,
