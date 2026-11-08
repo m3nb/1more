@@ -107,12 +107,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 24),
               Panel(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const Label('Play on this device'),
-                  FilledButton.icon(
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1),
+                    ),
                     onPressed: () =>
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocalSetupScreen())),
-                    icon: const Icon(Icons.smart_toy_outlined),
-                    label: const Text('Vs computer or pass & play'),
+                    child: const Text('Start'),
                   ),
                 ]),
               ),

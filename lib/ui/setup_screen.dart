@@ -47,11 +47,6 @@ String personaName(String type, Iterable<String> taken) {
   return '$base $n';
 }
 
-bool _isDefaultCpuName(String name) {
-  final t = name.trim();
-  if (t.isEmpty || t.startsWith('CPU')) return true;
-  return kPersonas.values.any((p) => t == p.name || t.startsWith('${p.name} '));
-}
 
 class LocalSetupScreen extends StatefulWidget {
   const LocalSetupScreen({super.key});
@@ -132,7 +127,22 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                         child: Text('${i + 1}',
                             style: const TextStyle(color: C.saffron, fontWeight: FontWeight.w900, fontSize: 18)),
                       ),
-                      Expanded(child: TextField(controller: seats[i].name, maxLength: 16, buildCounter: _noCounter)),
+                      Expanded(
+                        child: TextField(
+                          controller: seats[i].name,
+                          maxLength: 16,
+                          buildCounter: _noCounter,
+                          // Computer characters keep their own names.
+                          readOnly: seats[i].type != 'human',
+                          enableInteractiveSelection: seats[i].type == 'human',
+                          style: TextStyle(color: seats[i].type == 'human' ? C.ink : C.saffron, fontWeight: FontWeight.w700),
+                          decoration: InputDecoration(
+                            suffixIcon: seats[i].type == 'human'
+                                ? null
+                                : const Icon(Icons.lock_outline, size: 18, color: C.inkSoft),
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 160,
@@ -145,10 +155,13 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                           ],
                           onChanged: (v) => setState(() {
                             final type = v ?? 'human';
+                            final wasCpu = seats[i].type != 'human';
                             seats[i].type = type;
-                            if (type != 'human' && _isDefaultCpuName(seats[i].name.text)) {
-                              final others = [for (var k = 0; k < seats.length; k++) if (k != i) seats[k].name.text];
+                            final others = [for (var k = 0; k < seats.length; k++) if (k != i) seats[k].name.text];
+                            if (type != 'human') {
                               seats[i].name.text = personaName(type, others);
+                            } else if (wasCpu) {
+                              seats[i].name.text = 'Player ${i + 1}';
                             }
                           }),
                         ),
