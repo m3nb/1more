@@ -147,7 +147,9 @@ void main() {
       e.apply(0, 'stay');
       e.apply(1, 'draw'); // 5
       e.apply(1, 'draw'); // Negative: only player 1 is still in
-      expect(e.s.pending, isNull);
+      // No target question: it went straight to the drawer, whose turn it is again.
+      expect(e.s.pending!.type, DType.turn);
+      expect(e.s.pending!.player, 1);
       expect(e.s.players[1].hand.neg, isTrue);
       expect(e.s.players[0].hand.neg, isFalse);
     });
