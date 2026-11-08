@@ -1,0 +1,120 @@
+name: Build 1More
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEFINES: >-
+    --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }}
+    --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
+    --dart-define=WEB_URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: bash tool/prepare.sh
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: bash tool/prepare.sh
+      - run: flutter build apk --release $DEFINES
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1More-android
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  web:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: bash tool/prepare.sh
+      - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/" $DEFINES
+      - uses: actions/configure-pages@v5
+        continue-on-error: true
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy-web:
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: bash tool/prepare.sh
+      - run: flutter build windows --release $DEFINES
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1More-windows
+          path: build/windows/x64/runner/Release
+
+  apple:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: bash tool/prepare.sh
+      - run: flutter build macos --release $DEFINES
+      - run: cd build/macos/Build/Products/Release && ditto -c -k --keepParent 1More.app ../../../../../1More-macos.zip
+      - run: flutter build ios --release --no-codesign $DEFINES
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1More-macos
+          path: 1More-macos.zip
