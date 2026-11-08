@@ -320,6 +320,11 @@ class GameState {
     );
   }
 
+  /// Every card is somewhere: deck, discard, a hand, or held by a player
+  /// who is choosing a target for it.
   int cardsInPlay() =>
-      deck.length + discard.length + players.fold<int>(0, (a, p) => a + p.hand.allCards.length);
+      deck.length +
+      discard.length +
+      players.fold<int>(0, (a, p) => a + p.hand.allCards.length) +
+      (pending?.card != null ? 1 : 0);
 }
