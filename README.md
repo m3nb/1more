@@ -16,12 +16,7 @@ iPhone builds are compiled to check the code, but installing on a real iPhone or
 
 ## Online play
 
-Rooms use Supabase Realtime. Add two repository variables under **Settings → Secrets and variables → Actions → Variables**:
-
-- `SUPABASE_URL`: your project's URL
-- `SUPABASE_ANON_KEY`: the project's anon (public) key
-
-Without them the app still builds, with online play switched off.
+Rooms use Supabase Realtime. The project URL and its publishable (public) key are in `lib/config.dart`.
 
 ## Run it on your own computer
 
