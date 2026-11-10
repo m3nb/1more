@@ -197,6 +197,10 @@ void main() {
       expect(pick(table('vex'), 'flip3'), 2);
     });
 
+    test('Rocky freezes whoever is closest to winning', () {
+      expect(pick(table('rocky'), 'freeze'), 2);
+    });
+
     test('Rocky keeps drawing where Sage stops', () {
       GameState hand(String type) => GameState(
             players: [

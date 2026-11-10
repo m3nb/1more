@@ -208,6 +208,9 @@ int? _rockyTarget(GameState s, Decision d, Random rng) {
       if (d.candidates.contains(me) && dupChance(s, me) < 0.2) return me;
       return null;
     case 'freeze':
+      // Stops whoever is closest to winning from drawing any further.
+      if (opp.isEmpty) return null;
+      return _best(opp, (k) => (s.players[k].total + max(0, valueOf(s, k))).toDouble());
     case 'give':
       return opp.isEmpty ? null : opp[rng.nextInt(opp.length)];
   }
