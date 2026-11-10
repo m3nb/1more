@@ -208,9 +208,11 @@ int? _rockyTarget(GameState s, Decision d, Random rng) {
       if (d.candidates.contains(me) && dupChance(s, me) < 0.2) return me;
       return null;
     case 'freeze':
-      // Stops whoever is closest to winning from drawing any further.
+      // Like Vex: freeze whoever is closest to winning, but only while their
+      // round points are still low, so the freeze locks in very little.
       if (opp.isEmpty) return null;
-      return _best(opp, (k) => (s.players[k].total + max(0, valueOf(s, k))).toDouble());
+      final leader = _best(opp, (k) => (s.players[k].total + max(0, valueOf(s, k))).toDouble());
+      return valueOf(s, leader) <= 15 ? leader : null;
     case 'give':
       return opp.isEmpty ? null : opp[rng.nextInt(opp.length)];
   }
