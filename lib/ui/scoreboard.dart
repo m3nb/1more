@@ -44,7 +44,7 @@ class _CrownPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// A strip of every player's total, highest first, with a crown on the leader.
+/// A slim strip of every player's total, highest first, crown on the leader.
 class Scoreboard extends StatelessWidget {
   final GameState state;
   final String? myClientId;
@@ -54,54 +54,33 @@ class Scoreboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = state;
     final lead = leaders(s);
-    final turn = (s.phase == 'deal' || s.phase == 'play') ? s.pending?.player : null;
     final order = List.generate(s.players.length, (i) => i)
       ..sort((a, b) => s.players[b].total - s.players[a].total);
     return SizedBox(
-      height: 74,
+      height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: order.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (context, k) {
           final i = order[k];
           final p = s.players[i];
-          final round = scoreOf(p.hand).value;
+          final col = playerColor(i);
           final isLead = lead.contains(i);
-          final mine = p.clientId != null && p.clientId == myClientId;
           return Container(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: isLead ? C.saffron.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: i == turn ? C.saffron : (isLead ? C.saffron.withValues(alpha: .5) : C.line)),
+              color: col.withValues(alpha: isLead ? 0.22 : 0.10),
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(color: col.withValues(alpha: isLead ? 1 : 0.5), width: isLead ? 2 : 1),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                SizedBox(height: 14, child: isLead ? const Crown() : null),
-                Text(
-                  p.name + (mine ? ' (you)' : ''),
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isLead ? C.saffron : C.inkSoft,
-                  ),
-                ),
-                Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic, children: [
-                  Text('${p.total}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, height: 1.1)),
-                  if (round != 0) ...[
-                    const SizedBox(width: 4),
-                    Text(round > 0 ? '+$round' : '$round',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700, color: round > 0 ? C.mint : C.plum)),
-                  ],
-                ]),
-              ],
-            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (isLead) const Padding(padding: EdgeInsets.only(right: 5), child: Crown(size: 16)),
+              Text(p.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: col)),
+              const SizedBox(width: 6),
+              Text('${p.total}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            ]),
           );
         },
       ),

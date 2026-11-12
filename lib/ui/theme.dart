@@ -95,3 +95,17 @@ class Label extends StatelessWidget {
 }
 
 const titleStyle = TextStyle(color: C.saffron, fontSize: 44, fontWeight: FontWeight.w900, height: 1);
+
+/// One colour per seat, so a player is recognisable everywhere on the table.
+const playerColors = [
+  Color(0xFF86D6F2),
+  Color(0xFF73DBA0),
+  Color(0xFFE46BB0),
+  Color(0xFFB39BFF),
+  Color(0xFFFFA94D),
+  Color(0xFFC5E063),
+  Color(0xFF6FA8FF),
+  Color(0xFFFF8FA3),
+];
+
+Color playerColor(int seat) => playerColors[seat % playerColors.length];
