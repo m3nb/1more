@@ -83,22 +83,35 @@ class _GameScreenState extends State<GameScreen> {
   String _flashWho = '';
   Timer? _flashTimer;
 
+  // How long the table has been waiting on the same decision.
+  int _waitVersion = -1;
+  DateTime _waitSince = DateTime.now();
+  Timer? _tick;
+
   @override
   void initState() {
     super.initState();
     ctl.addListener(_onState);
+    _tick = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     ctl.removeListener(_onState);
     _flashTimer?.cancel();
+    _tick?.cancel();
     super.dispose();
   }
 
   void _onState() {
     final s = ctl.state;
     if (s == null) return;
+    if (s.version != _waitVersion) {
+      _waitVersion = s.version;
+      _waitSince = DateTime.now();
+    }
     final id = s.lastCardId;
     if (id == null || id == _seenCard) return;
     _seenCard = id;
@@ -525,7 +538,38 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  Future<void> _confirmTakeOver(int seat) async {
+    final name = ctl.state?.players[seat].name ?? 'This player';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Let the computer play for $name?'),
+        content: Text('Use this only if $name has left or lost connection. '
+            'They can take their seat back from their own phone at any time.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep waiting')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Computer plays')),
+        ],
+      ),
+    );
+    if (ok == true) ctl.takeOverSeat(seat);
+  }
+
+  /// Shown to a player whose seat the computer is covering.
+  Widget? _takenOverBar(GameState s) {
+    final me = widget.myClientId;
+    if (me == null) return null;
+    final i = s.players.indexWhere((p) => p.clientId == me);
+    if (i < 0 || !s.players[i].isCpu) return null;
+    return Row(children: [
+      const Expanded(child: Text('The computer is playing your seat.', style: TextStyle(fontWeight: FontWeight.w700))),
+      FilledButton(onPressed: ctl.reclaimSeat, child: const Text('Take my seat back')),
+    ]);
+  }
+
   Widget _actions(GameState s) {
+    final back = _takenOverBar(s);
+    if (back != null) return back;
     final d = s.pending;
     if (d == null) return const SizedBox(height: 48);
     final p = s.players[d.player];
@@ -538,8 +582,11 @@ class _GameScreenState extends State<GameScreen> {
             TextSpan(text: p.isCpu ? ' is thinking…' : ' is playing…'),
           ])),
         ),
-        if (ctl.canTakeOverSeats && p.type == 'remote')
-          TextButton(onPressed: () => ctl.takeOverSeat(d.player), child: const Text('Let CPU play this seat')),
+        // Only offered after a long wait, and only after the host confirms.
+        if (ctl.canTakeOverSeats &&
+            p.type == 'remote' &&
+            DateTime.now().difference(_waitSince).inSeconds >= 45)
+          TextButton(onPressed: () => _confirmTakeOver(d.player), child: Text('${p.name} not responding?')),
       ]);
     }
     final name = TextSpan(text: p.name, style: const TextStyle(color: C.saffron, fontWeight: FontWeight.w800));

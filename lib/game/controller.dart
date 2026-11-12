@@ -29,6 +29,9 @@ abstract class GameController extends ChangeNotifier {
   bool get canTakeOverSeats => false;
   void takeOverSeat(int i) {}
 
+  /// A player whose seat the computer took over asks for it back.
+  void reclaimSeat() {}
+
   void leave() {}
 }
 

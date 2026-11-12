@@ -157,7 +157,8 @@ class OnlineSession extends ChangeNotifier {
       switch (kind) {
         case 'join':
           if (started) {
-            (controller as HostController).broadcast();
+            // Someone who reloaded or reconnected gets their seat back.
+            (controller as HostController).rejoin(from, m['name'] as String? ?? '');
             return;
           }
           if (!seats.any((s) => s.cid == from)) {
@@ -182,6 +183,9 @@ class OnlineSession extends ChangeNotifier {
           break;
         case 'act':
           if (started) (controller as HostController).remoteAct(from, m);
+          break;
+        case 'reclaim':
+          if (started) (controller as HostController).reclaim(from);
           break;
       }
     } else {
@@ -271,9 +275,41 @@ class HostController extends EngineController {
   @override
   bool get canTakeOverSeats => true;
 
+  /// The computer plays the seat for now. The seat still belongs to its
+  /// player (the client id stays), who can take it back at any time.
   @override
   void takeOverSeat(int i) {
+    final p = engine.s.players[i];
+    if (p.type != 'remote') return;
     engine.setPlayerType(i, 'sage');
+    changed();
+  }
+
+  int _seatOf(String cid) => engine.s.players.indexWhere((p) => p.clientId == cid);
+
+  void reclaim(String from) {
+    final i = _seatOf(from);
+    if (i >= 0 && engine.s.players[i].isCpu) {
+      engine.setPlayerType(i, 'remote');
+      changed();
+    } else {
+      broadcast();
+    }
+  }
+
+  /// A device joining mid-game: if it is a player who reloaded (same name,
+  /// new id), hand the seat to the new device.
+  void rejoin(String from, String name) {
+    var i = _seatOf(from);
+    if (i < 0) {
+      final wanted = name.trim().toLowerCase();
+      i = engine.s.players.indexWhere((p) =>
+          p.clientId != null && p.clientId != session.myId && p.name.trim().toLowerCase() == wanted);
+      if (i >= 0) engine.s.players[i].clientId = from;
+    }
+    if (i >= 0 && engine.s.players[i].type != 'remote') {
+      engine.setPlayerType(i, 'remote');
+    }
     changed();
   }
 
@@ -321,6 +357,11 @@ class GuestController extends GameController {
 
   @override
   void nextRound() {}
+
+  @override
+  void reclaimSeat() {
+    session.link.send('reclaim');
+  }
 
   @override
   String? get roomCode => session.code;
