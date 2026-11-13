@@ -191,6 +191,25 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   else
                     Text(kDeckModes[s.deckMode.clamp(0, kDeckModes.length - 1).toInt()],
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 16),
+                  const Label('Turn timer'),
+                  if (s.isHost)
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final v in const [0, 20, 30, 45])
+                        ChoiceChip(
+                          label: Text(v == 0 ? 'Off' : '${v}s', style: const TextStyle(fontWeight: FontWeight.w800)),
+                          selected: s.turnSeconds == v,
+                          selectedColor: C.saffron,
+                          labelStyle: TextStyle(color: s.turnSeconds == v ? C.stockInk : C.ink),
+                          onSelected: (_) => s.setTurnSeconds(v),
+                        ),
+                    ])
+                  else
+                    Text(s.turnSeconds == 0 ? 'Off' : '${s.turnSeconds} seconds',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  const Text('When time runs out, a forced first card is drawn and a normal turn becomes Stay.',
+                      style: TextStyle(color: C.inkSoft, fontSize: 12)),
                   const SizedBox(height: 20),
                   if (s.isHost)
                     SizedBox(

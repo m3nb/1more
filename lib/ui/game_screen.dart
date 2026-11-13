@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../engine/ai.dart';
 import '../engine/model.dart';
 import '../game/controller.dart';
+import '../profile.dart';
 import 'card_view.dart';
 import 'effects.dart';
 import 'scoreboard.dart';
@@ -74,7 +76,10 @@ class _FlipIn extends StatelessWidget {
 class GameScreen extends StatefulWidget {
   final GameController controller;
   final String? myClientId;
-  const GameScreen({super.key, required this.controller, this.myClientId});
+
+  /// The solo daily challenge: fixed rounds, score goes to the profile.
+  final bool daily;
+  const GameScreen({super.key, required this.controller, this.myClientId, this.daily = false});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -86,6 +91,61 @@ class _GameScreenState extends State<GameScreen> {
   // An action card that resolved by itself is shown briefly so nobody misses it.
   int? _seenCard;
   int _seenEvent = -1;
+
+  // Floating +12 / −8 over a seat when its round points change.
+  final Map<int, int> _prevVal = {};
+  final Map<int, List<int>> _float = {};
+  int _floatKey = 0;
+  int _floatRound = -1;
+
+  // Stats are recorded once per round, for the one player on this device.
+  bool _roundRecorded = false;
+  bool _wasNegative = false;
+
+  int? _mySeat(GameState s) {
+    final me = widget.myClientId;
+    if (me != null) {
+      final i = s.players.indexWhere((p) => p.clientId == me);
+      return i < 0 ? null : i;
+    }
+    final humans = [for (var i = 0; i < s.players.length; i++) if (s.players[i].type == 'human') i];
+    return humans.length == 1 ? humans.first : null;
+  }
+
+  void _record(GameState s) {
+    final playing = s.phase == 'deal' || s.phase == 'play';
+    final me = _mySeat(s);
+    if (me != null && s.players[me].total < 0) _wasNegative = true;
+    if (playing) {
+      _roundRecorded = false;
+      return;
+    }
+    if (_roundRecorded || me == null) return;
+    _roundRecorded = true;
+    final mine = s.results.where((r) => r.player == me).toList();
+    if (mine.isEmpty) return;
+    final r = mine.first;
+    final fresh = <String>[
+      ...Profile.I.recordRound(
+        points: r.value,
+        bust: r.status == PStatus.bust,
+        seven: r.status != PStatus.bust && s.players[me].hand.nums.length >= 7,
+      ),
+    ];
+    if (s.phase == 'gameOver') {
+      fresh.addAll(widget.daily
+          ? Profile.I.recordDaily(s.players[me].total)
+          : Profile.I.recordGame(won: s.winner == me, wasNegative: _wasNegative));
+      _wasNegative = false;
+    }
+    if (fresh.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Achievement unlocked: ${fresh.join(', ')}  (+${fresh.length * 25} coins)')));
+      });
+    }
+  }
   GameCard? _flash;
   GameCard? _flashCard2;
   String? _flashTitle;
@@ -102,7 +162,7 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     ctl.addListener(_onState);
-    _tick = Timer.periodic(const Duration(seconds: 5), (_) {
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -136,6 +196,17 @@ class _GameScreenState extends State<GameScreen> {
       _waitVersion = s.version;
       _waitSince = DateTime.now();
     }
+    if (s.phase == 'deal' || s.phase == 'play') {
+      for (var i = 0; i < s.players.length; i++) {
+        final v = scoreOf(s.players[i].hand).value;
+        final old = _prevVal[i];
+        if (old != null && old != v && s.round == _floatRound) _float[i] = [v - old, ++_floatKey];
+        _prevVal[i] = v;
+      }
+      _floatRound = s.round;
+    }
+    _record(s);
+    if (s.lastCardId != null && s.lastCardId != _seenCard) HapticFeedback.selectionClick();
     // A bust, or a duplicate that Second Chance absorbed.
     if (s.evId != _seenEvent) {
       final fresh = _seenEvent != -1 || s.evId == 1;
@@ -152,6 +223,7 @@ class _GameScreenState extends State<GameScreen> {
               kind: 'saved',
               ms: 2800);
         } else if (s.evType == 'bust') {
+          HapticFeedback.heavyImpact();
           _showFlash(dup, title: 'BUST!', line: '$name drew a second ${s.evValue}.', kind: 'bust', ms: 1500);
         } else if (s.evType == 'seven') {
           _showFlash(GameCard(-900 - s.evId, CardType.add, 15),
@@ -370,6 +442,31 @@ class _GameScreenState extends State<GameScreen> {
     ]);
   }
 
+  static const _emotes = ['😂', '😱', '🔥', '😈', '👏', '😭'];
+  static const _phrases = ['One more!', 'Stop now!', 'Nooo!', 'Nice one!', 'Ouch!', 'Too easy'];
+
+  void _openEmotes() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: C.felt2,
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center, children: [
+            for (final e in [..._emotes, ..._phrases])
+              OutlinedButton(
+                onPressed: () {
+                  ctl.sendEmote(e);
+                  Navigator.pop(sheet);
+                },
+                child: Text(e, style: TextStyle(fontSize: e.length <= 2 ? 26 : 15)),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   // ---------------- top ----------------
 
   Widget _topBar(GameState s) {
@@ -384,9 +481,11 @@ class _GameScreenState extends State<GameScreen> {
       child: Row(children: [
         const Text('1More', style: TextStyle(color: C.saffron, fontSize: 22, fontWeight: FontWeight.w900)),
         const SizedBox(width: 12),
-        stat('${s.round}', 'ROUND'),
-        const SizedBox(width: 12),
-        stat('${s.target}', 'TARGET'),
+        stat(s.maxRounds > 0 ? '${s.round}/${s.maxRounds}' : '${s.round}', 'ROUND'),
+        if (s.maxRounds == 0) ...[
+          const SizedBox(width: 12),
+          stat('${s.target}', 'TARGET'),
+        ],
         if (ctl.roomCode != null) ...[
           const SizedBox(width: 12),
           stat(ctl.roomCode!, 'ROOM'),
@@ -397,6 +496,9 @@ class _GameScreenState extends State<GameScreen> {
             child: Text(ctl.connectionNote!,
                 overflow: TextOverflow.ellipsis, style: const TextStyle(color: C.coral, fontSize: 12)),
           ),
+        if (ctl.canEmote)
+          IconButton(
+              onPressed: _openEmotes, icon: const Icon(Icons.emoji_emotions_outlined), tooltip: 'React'),
         IconButton(onPressed: _confirmLeave, icon: const Icon(Icons.close), tooltip: 'Leave game'),
       ]),
     );
@@ -553,6 +655,46 @@ class _GameScreenState extends State<GameScreen> {
         Expanded(
           child: Stack(children: [
             Positioned.fill(child: _hand(s, h)),
+            if (_float[i] != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: IgnorePointer(
+                  child: TweenAnimationBuilder<double>(
+                    key: ValueKey(_float[i]![1]),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 1300),
+                    builder: (context, t, _) => Opacity(
+                      opacity: t < 0.65 ? 1.0 : ((1 - t) / 0.35).clamp(0.0, 1.0),
+                      child: Transform.translate(
+                        offset: Offset(0, 10 - 22 * t),
+                        child: Text(
+                          _float[i]![0] > 0 ? '+${_float[i]![0]}' : '${_float[i]![0]}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: _float[i]![0] > 0 ? C.mint : C.coral,
+                            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (ctl.emoteFor(p) != null)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                  child: Text(ctl.emoteFor(p)!,
+                      style: const TextStyle(color: C.stockInk, fontSize: 15, fontWeight: FontWeight.w800)),
+                ),
+              ),
             if (frozen)
               const Positioned(
                 right: 0,
@@ -663,6 +805,7 @@ class _GameScreenState extends State<GameScreen> {
   // ---------------- bottom: actions or results ----------------
 
   Widget _bottom(GameState s) {
+    final secs = ctl.secondsLeft;
     Widget content;
     if (s.phase == 'roundEnd' || s.phase == 'gameOver') {
       content = _results(s);
@@ -676,7 +819,20 @@ class _GameScreenState extends State<GameScreen> {
         border: Border(top: BorderSide(color: C.line)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: content,
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (secs != null && s.pending != null && (s.phase == 'deal' || s.phase == 'play'))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(children: [
+              Icon(Icons.timer_outlined, size: 16, color: secs <= 5 ? C.coral : C.inkSoft),
+              const SizedBox(width: 4),
+              Text('${secs}s',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w800, color: secs <= 5 ? C.coral : C.inkSoft)),
+            ]),
+          ),
+        content,
+      ]),
     );
   }
 
@@ -790,7 +946,10 @@ class _GameScreenState extends State<GameScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (over)
             Center(
-              child: Text('${s.players[s.winner!].name} wins!',
+              child: Text(
+                  widget.daily
+                      ? 'Daily score: ${s.players[s.winner!].total}'
+                      : '${s.players[s.winner!].name} wins!',
                   style: const TextStyle(color: C.saffron, fontSize: 32, fontWeight: FontWeight.w900)),
             )
           else
@@ -798,7 +957,7 @@ class _GameScreenState extends State<GameScreen> {
                 style: const TextStyle(color: C.saffron, fontSize: 22, fontWeight: FontWeight.w900)),
           Text(
             over
-                ? 'Target was ${s.target}.'
+                ? (widget.daily ? 'Same deck for everyone today. Compare with your friends.' : 'Target was ${s.target}.')
                 : (s.tie ? 'Tie at the top above the target. One more round to settle it.' : 'Target: ${s.target} points.'),
             style: const TextStyle(color: C.inkSoft, fontSize: 13),
           ),
@@ -839,7 +998,8 @@ class _GameScreenState extends State<GameScreen> {
                     if (ctl.canReturnToRoom)
                       FilledButton(onPressed: ctl.returnToRoom, child: const Text('Back to room'))
                     else if (ctl.canRestart)
-                      FilledButton(onPressed: ctl.restart, child: const Text('Play again'))
+                      FilledButton(
+                          onPressed: ctl.restart, child: Text(widget.daily ? 'Try again' : 'Play again'))
                     else
                       const Text('Waiting for the host to reopen the room…', style: TextStyle(color: C.inkSoft)),
                   ])

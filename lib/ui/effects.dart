@@ -1,7 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../profile.dart';
 import 'theme.dart';
 
 /// Drifting specks: snow falling for Freeze, embers rising for ×2.
@@ -163,27 +165,34 @@ class _HitButtonState extends State<HitButton> with SingleTickerProviderStateMix
             ),
             textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 3),
           ),
-          onPressed: widget.onPressed,
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            widget.onPressed();
+          },
           child: const Text('HIT'),
         ),
       );
 }
 
-/// The red glow behind the table.
+/// The glow behind the table, in the colours the player picked.
 class TableBg extends StatelessWidget {
   final Widget child;
   const TableBg({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.9),
-            radius: 1.3,
-            colors: [Color(0xFF6E1024), Color(0xFF2A0811), C.felt],
-            stops: [0, 0.55, 1],
-          ),
-        ),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Profile.I,
         child: child,
+        builder: (context, child) => DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: const Alignment(0, -0.9),
+              radius: 1.3,
+              colors: Profile.I.tableTheme.colors,
+              stops: const [0, 0.55, 1],
+            ),
+          ),
+          child: child,
+        ),
       );
 }

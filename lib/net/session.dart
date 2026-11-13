@@ -46,6 +46,34 @@ class OnlineSession extends ChangeNotifier {
   List<LobbySeat> seats = [];
   int target = 200;
   int deckMode = 0;
+  int turnSeconds = 30;
+
+  // Quick reactions, by client id. Each one clears itself.
+  final Map<String, String> emotes = {};
+  final Map<String, Timer> _emoteTimers = {};
+
+  void sendEmote(String e) {
+    _showEmote(myId, e);
+    link.send('emote', {'e': e});
+  }
+
+  void _showEmote(String cid, String e) {
+    if (e.isEmpty || e.length > 24) return;
+    emotes[cid] = e;
+    _emoteTimers[cid]?.cancel();
+    _emoteTimers[cid] = Timer(const Duration(seconds: 3), () {
+      emotes.remove(cid);
+      if (!_closed) controller?.poke();
+    });
+    if (!_closed) controller?.poke();
+  }
+
+  void setTurnSeconds(int v) {
+    if (!isHost || started) return;
+    turnSeconds = v;
+    _sendLobby();
+    _notify();
+  }
   bool connected = false;
   String? note;
   String? fatal;
@@ -116,7 +144,7 @@ class OnlineSession extends ChangeNotifier {
   // ---------------- host ----------------
 
   Future<void> _sendLobby() =>
-      link.send('lobby', {'seats': seats.map((s) => s.toJson()).toList(), 'target': target, 'dm': deckMode});
+      link.send('lobby', {'seats': seats.map((s) => s.toJson()).toList(), 'target': target, 'dm': deckMode, 'tt': turnSeconds});
 
   void addCpu(String persona) {
     if (!isHost || started || seats.length >= 8) return;
@@ -187,6 +215,10 @@ class OnlineSession extends ChangeNotifier {
     final kind = m['k'];
     final from = m['from'] as String?;
     if (from == null) return;
+    if (kind == 'emote') {
+      _showEmote(from, m['e'] as String? ?? '');
+      return;
+    }
     if (isHost) {
       switch (kind) {
         case 'join':
@@ -232,6 +264,7 @@ class OnlineSession extends ChangeNotifier {
           seats = (m['seats'] as List).map(LobbySeat.fromJson).toList();
           target = (m['target'] as num).toInt();
           deckMode = (m['dm'] as num?)?.toInt() ?? 0;
+          turnSeconds = (m['tt'] as num?)?.toInt() ?? 0;
           note = null;
           _notify();
           break;
@@ -241,7 +274,7 @@ class OnlineSession extends ChangeNotifier {
             controller = GuestController(this);
             _joinRetry?.cancel();
           }
-          (controller as GuestController).receive(st);
+          (controller as GuestController).receive(st, (m['dl'] as num?)?.toInt());
           note = null;
           _notify();
           break;
@@ -280,7 +313,16 @@ class OnlineSession extends ChangeNotifier {
 /// The host runs the engine and sends the whole state after every change.
 class HostController extends EngineController {
   final OnlineSession session;
-  HostController(this.session, Engine engine) : super(engine);
+  HostController(this.session, Engine engine) : super(engine, turnSeconds: session.turnSeconds);
+
+  @override
+  bool get canEmote => true;
+
+  @override
+  String? emoteFor(Player p) => p.clientId == null ? null : session.emotes[p.clientId];
+
+  @override
+  void sendEmote(String e) => session.sendEmote(e);
 
   @override
   String? get roomCode => session.code;
@@ -289,11 +331,12 @@ class HostController extends EngineController {
   String? get connectionNote => session.connected ? null : (session.note ?? 'Offline');
 
   void broadcast() {
-    session.link.send('state', {'state': engine.s.toJson(hideDeck: true)});
+    session.link.send('state', {'state': engine.s.toJson(hideDeck: true), 'dl': millisLeft});
   }
 
   @override
   void changed() {
+    scheduleTurn(); // so the broadcast carries the new deadline
     broadcast();
     super.changed();
   }
@@ -373,10 +416,29 @@ class GuestController extends GameController {
   final OnlineSession session;
   GameState? _state;
   bool _hostGone = false;
+  DateTime? _deadline;
   GuestController(this.session);
 
-  void receive(GameState s) {
+  @override
+  bool get canEmote => true;
+
+  @override
+  String? emoteFor(Player p) => p.clientId == null ? null : session.emotes[p.clientId];
+
+  @override
+  void sendEmote(String e) => session.sendEmote(e);
+
+  @override
+  int? get secondsLeft {
+    final d = _deadline;
+    if (d == null) return null;
+    final ms = d.difference(DateTime.now()).inMilliseconds;
+    return ms <= 0 ? 0 : (ms / 1000).ceil();
+  }
+
+  void receive(GameState s, [int? millisLeft]) {
     if (_state != null && s.version < _state!.version) return;
+    _deadline = millisLeft == null ? null : DateTime.now().add(Duration(milliseconds: millisLeft));
     _state = s;
     notifyListeners();
   }

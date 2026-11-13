@@ -2,7 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'engine/engine.dart';
 import 'engine/model.dart';
+import 'engine/seeded.dart';
+import 'game/controller.dart';
+import 'profile.dart';
+import 'ui/game_screen.dart';
+import 'ui/profile_screen.dart';
 import 'net/session.dart';
 import 'ui/card_view.dart';
 import 'ui/effects.dart';
@@ -11,6 +17,8 @@ import 'ui/setup_screen.dart';
 import 'ui/theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  Profile.I.load();
   runApp(const OneMoreApp());
 }
 
@@ -46,6 +54,21 @@ class _HomeScreenState extends State<HomeScreen> {
       final room = Uri.base.queryParameters['room'];
       if (room != null && room.isNotEmpty) _code.text = normalizeCode(room);
     }
+  }
+
+  /// Five rounds alone against a deck that is the same for everyone today.
+  void _daily() {
+    final engine = Engine.newGame(
+      [Player(name: 'You', type: 'human')],
+      99999,
+      rng: SeededRandom(daySeed(DateTime.now())),
+      deckMode: 1,
+      maxRounds: 5,
+    );
+    final ctl = EngineController(engine);
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => GameScreen(controller: ctl, daily: true)))
+        .then((_) => Future.delayed(const Duration(milliseconds: 700), ctl.dispose));
   }
 
   Future<void> _online(bool host) async {
@@ -118,6 +141,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: const Text('Start'),
                   ),
                 ]),
+              ),
+              const SizedBox(height: 16),
+              ListenableBuilder(
+                listenable: Profile.I,
+                builder: (context, _) => Panel(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Label('Every day'),
+                    OutlinedButton.icon(
+                      onPressed: _daily,
+                      icon: const Icon(Icons.today),
+                      label: Text(Profile.I.playedToday
+                          ? 'Daily challenge · your best today: ${Profile.I.todayBest}'
+                          : 'Daily challenge · 5 rounds, same deck for everyone'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                      icon: Icon(Profile.I.canClaim ? Icons.card_giftcard : Icons.person,
+                          color: Profile.I.canClaim ? C.saffron : null),
+                      label: Text(Profile.I.canClaim
+                          ? 'Daily reward waiting · ${Profile.I.coins} coins'
+                          : 'Profile & rewards · ${Profile.I.coins} coins'),
+                    ),
+                  ]),
+                ),
               ),
               const SizedBox(height: 16),
               Panel(

@@ -40,6 +40,17 @@ abstract class GameController extends ChangeNotifier {
   /// A player whose seat the computer took over asks for it back.
   void reclaimSeat() {}
 
+  /// Quick reactions shown over a player's seat (online games).
+  bool get canEmote => false;
+  String? emoteFor(Player p) => null;
+  void sendEmote(String e) {}
+
+  /// Seconds left for the current decision, when a turn timer is running.
+  int? get secondsLeft => null;
+
+  /// Redraw without a state change (an emote arrived, say).
+  void poke() => notifyListeners();
+
   void leave() {}
 }
 
@@ -47,14 +58,64 @@ abstract class GameController extends ChangeNotifier {
 class EngineController extends GameController {
   final Engine engine;
   final bool fast;
+
+  /// 0 = no turn timer. Otherwise a player who waits this long is moved on:
+  /// a forced first card is drawn, a turn becomes Stay.
+  final int turnSeconds;
+  Timer? _turnTimer;
+  Decision? _turnFor;
+  DateTime? _deadline;
   final Random _rng = Random();
   Timer? _timer;
   bool _disposed = false;
   int _lastEvent = 0;
   int? _lastCard;
 
-  EngineController(this.engine, {this.fast = false}) {
+  EngineController(this.engine, {this.fast = false, this.turnSeconds = 0}) {
+    scheduleTurn();
     scheduleCpu();
+  }
+
+  @override
+  int? get secondsLeft {
+    final d = _deadline;
+    if (d == null) return null;
+    final ms = d.difference(DateTime.now()).inMilliseconds;
+    return ms <= 0 ? 0 : (ms / 1000).ceil();
+  }
+
+  int? get millisLeft {
+    final d = _deadline;
+    if (d == null) return null;
+    return max(0, d.difference(DateTime.now()).inMilliseconds);
+  }
+
+  /// Starts the clock when a new decision is waiting on a person.
+  void scheduleTurn() {
+    final d = engine.s.pending;
+    if (identical(d, _turnFor)) return;
+    _turnFor = d;
+    _turnTimer?.cancel();
+    _deadline = null;
+    if (turnSeconds <= 0 || d == null) return;
+    if (engine.s.players[d.player].isCpu) return;
+    _deadline = DateTime.now().add(Duration(seconds: turnSeconds));
+    _turnTimer = Timer(Duration(seconds: turnSeconds), () {
+      if (_disposed || !identical(engine.s.pending, d)) return;
+      final name = engine.s.players[d.player].name;
+      var type = 'stay';
+      int? target;
+      if (d.type == DType.draw) {
+        type = 'draw';
+      } else if (d.type == DType.target) {
+        type = 'target';
+        target = decideAi(engine.s, _rng).target;
+      }
+      if (engine.apply(d.player, type, target: target)) {
+        engine.s.log.insert(0, '$name ran out of time.');
+        changed();
+      }
+    });
   }
 
   @override
@@ -91,6 +152,7 @@ class EngineController extends GameController {
   @mustCallSuper
   void changed() {
     if (_disposed) return;
+    scheduleTurn();
     notifyListeners();
     scheduleCpu();
   }
@@ -127,6 +189,7 @@ class EngineController extends GameController {
   void dispose() {
     _disposed = true;
     _timer?.cancel();
+    _turnTimer?.cancel();
     super.dispose();
   }
 }
