@@ -33,6 +33,10 @@ abstract class GameController extends ChangeNotifier {
   bool get canRestart => false;
   void restart() {}
 
+  /// Online host only: take everyone back to the room to change players or settings.
+  bool get canReturnToRoom => false;
+  void returnToRoom() {}
+
   /// A player whose seat the computer took over asks for it back.
   void reclaimSeat() {}
 

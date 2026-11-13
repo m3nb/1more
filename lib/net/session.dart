@@ -52,6 +52,10 @@ class OnlineSession extends ChangeNotifier {
   GameController? controller;
   Timer? _joinRetry;
   bool _closed = false;
+  bool get closed => _closed;
+
+  // Guests who left during a game; they are dropped when the room reopens.
+  final Set<String> _gone = {};
 
   OnlineSession._(this.isHost, this.code, this.myName) : myId = newClientId() {
     link = RoomLink(code, myId);
@@ -142,6 +146,28 @@ class OnlineSession extends ChangeNotifier {
     _notify();
   }
 
+  /// After a game: same room, same code. Everyone lands back in the lobby,
+  /// where the host can change players and settings before starting again.
+  void backToLobby() {
+    if (!isHost || controller == null) return;
+    final st = controller!.state;
+    if (st != null) {
+      seats = [
+        for (final p in st.players)
+          if (p.clientId == null || !_gone.contains(p.clientId))
+            LobbySeat(
+              p.name,
+              p.clientId == myId ? 'human' : (p.clientId != null ? 'remote' : p.type),
+              p.clientId,
+            ),
+      ];
+    }
+    _gone.clear();
+    controller = null;
+    _sendLobby();
+    _notify();
+  }
+
   void setDeckMode(int mode) {
     if (!isHost || started) return;
     deckMode = mode;
@@ -187,6 +213,8 @@ class OnlineSession extends ChangeNotifier {
             seats.removeWhere((s) => s.cid == from);
             _sendLobby();
             _notify();
+          } else {
+            _gone.add(from);
           }
           break;
         case 'act':
@@ -199,6 +227,8 @@ class OnlineSession extends ChangeNotifier {
     } else {
       switch (kind) {
         case 'lobby':
+          // Also how the host brings everyone back to the room after a game.
+          controller = null;
           seats = (m['seats'] as List).map(LobbySeat.fromJson).toList();
           target = (m['target'] as num).toInt();
           deckMode = (m['dm'] as num?)?.toInt() ?? 0;
@@ -283,6 +313,16 @@ class HostController extends EngineController {
 
   @override
   bool get canTakeOverSeats => true;
+
+  // Online games go back to the room instead of restarting in place.
+  @override
+  bool get canRestart => false;
+
+  @override
+  bool get canReturnToRoom => true;
+
+  @override
+  void returnToRoom() => session.backToLobby();
 
   /// The computer plays the seat for now. The seat still belongs to its
   /// player (the client id stays), who can take it back at any time.

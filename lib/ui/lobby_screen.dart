@@ -31,6 +31,14 @@ class LobbyScreen extends StatefulWidget {
 class _LobbyScreenState extends State<LobbyScreen> {
   OnlineSession get s => widget.session;
   bool _inGame = false;
+  bool _returning = false;
+  Route<dynamic>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
+  }
 
   @override
   void initState() {
@@ -52,10 +60,22 @@ class _LobbyScreenState extends State<LobbyScreen> {
       Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => GameScreen(controller: ctl, myClientId: s.myId)))
           .then((_) async {
+        _inGame = false;
+        _returning = false;
+        // Let the closing animation finish before the controller goes away.
+        Future.delayed(const Duration(milliseconds: 700), ctl.dispose);
+        if (!s.closed && s.controller == null) {
+          // The host reopened the room: stay here, same code, same players.
+          if (mounted) setState(() {});
+          return;
+        }
         await s.close();
-        ctl.dispose();
         if (mounted) Navigator.of(context).pop();
       });
+    } else if (s.controller == null && _inGame && !_returning) {
+      _returning = true;
+      final route = _route;
+      Navigator.of(context).popUntil((r) => r == route || r.isFirst);
     }
     setState(() {});
   }

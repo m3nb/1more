@@ -821,10 +821,12 @@ class _GameScreenState extends State<GameScreen> {
                           Navigator.of(context).pop();
                         },
                         child: const Text('Leave')),
-                    if (ctl.canRestart)
+                    if (ctl.canReturnToRoom)
+                      FilledButton(onPressed: ctl.returnToRoom, child: const Text('Back to room'))
+                    else if (ctl.canRestart)
                       FilledButton(onPressed: ctl.restart, child: const Text('Play again'))
                     else
-                      const Text('Waiting for the host to start a new game…', style: TextStyle(color: C.inkSoft)),
+                      const Text('Waiting for the host to reopen the room…', style: TextStyle(color: C.inkSoft)),
                   ])
                 : (ctl.canAdvanceRound
                     ? FilledButton(onPressed: ctl.nextRound, child: const Text('Next round'))
