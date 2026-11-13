@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../config.dart';
+import '../engine/engine.dart';
 import '../net/session.dart';
 import 'game_screen.dart';
 import 'setup_screen.dart';
@@ -163,6 +164,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     TargetPicker(value: s.target, onChanged: s.setTarget)
                   else
                     Text('${s.target}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 16),
+                  const Label('Cards'),
+                  if (s.isHost)
+                    DeckModePicker(value: s.deckMode, onChanged: s.setDeckMode)
+                  else
+                    Text(kDeckModes[s.deckMode.clamp(0, kDeckModes.length - 1).toInt()],
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 20),
                   if (s.isHost)
                     SizedBox(

@@ -7,6 +7,7 @@ import '../engine/ai.dart';
 import '../engine/model.dart';
 import '../game/controller.dart';
 import 'card_view.dart';
+import 'effects.dart';
 import 'scoreboard.dart';
 import 'theme.dart';
 
@@ -79,8 +80,12 @@ class _GameScreenState extends State<GameScreen> {
 
   // An action card that resolved by itself is shown briefly so nobody misses it.
   int? _seenCard;
+  int _seenEvent = -1;
   GameCard? _flash;
-  String _flashWho = '';
+  GameCard? _flashCard2;
+  String? _flashTitle;
+  String _flashLine = '';
+  String _flashKind = '';
   Timer? _flashTimer;
 
   // How long the table has been waiting on the same decision.
@@ -105,6 +110,20 @@ class _GameScreenState extends State<GameScreen> {
     super.dispose();
   }
 
+  void _showFlash(GameCard card,
+      {GameCard? second, String? title, required String line, required String kind, int ms = 1700}) {
+    _flashTimer?.cancel();
+    _flash = card;
+    _flashCard2 = second;
+    _flashTitle = title;
+    _flashLine = line;
+    _flashKind = kind;
+    _flashTimer = Timer(Duration(milliseconds: ms), () {
+      if (mounted) setState(() => _flash = null);
+    });
+    if (mounted) setState(() {});
+  }
+
   void _onState() {
     final s = ctl.state;
     if (s == null) return;
@@ -112,21 +131,39 @@ class _GameScreenState extends State<GameScreen> {
       _waitVersion = s.version;
       _waitSince = DateTime.now();
     }
+    // A bust, or a duplicate that Second Chance absorbed.
+    if (s.evId != _seenEvent) {
+      final fresh = _seenEvent != -1 || s.evId == 1;
+      _seenEvent = s.evId;
+      if (fresh && s.evId > 0 && s.evType != null && s.evPlayer < s.players.length) {
+        _seenCard = s.lastCardId;
+        final name = s.players[s.evPlayer].name;
+        final dup = GameCard(-100 - s.evId, CardType.num, s.evValue);
+        if (s.evType == 'saved') {
+          _showFlash(dup,
+              second: GameCard(-500 - s.evId, CardType.sc),
+              title: 'Duplicate ${s.evValue}!',
+              line: 'Second Chance saved $name. Both cards are discarded.',
+              kind: 'saved',
+              ms: 2800);
+        } else {
+          _showFlash(dup, title: 'BUST!', line: '$name drew a second ${s.evValue}.', kind: 'bust', ms: 1300);
+        }
+        return;
+      }
+    }
     final id = s.lastCardId;
     if (id == null || id == _seenCard) return;
     _seenCard = id;
     final d = s.pending;
     if (d != null && d.type == DType.target && d.card?.id == id) return; // the chooser overlay shows it
     for (final p in s.players) {
-      for (final c in p.hand.acts) {
-        if (c.id == id) {
-          _flashTimer?.cancel();
-          _flash = c;
-          _flashWho = p.name;
-          _flashTimer = Timer(const Duration(milliseconds: 1700), () {
-            if (mounted) setState(() => _flash = null);
-          });
-          if (mounted) setState(() {});
+      for (final c in [...p.hand.acts, ...p.hand.mods]) {
+        if (c.id == id && (c.isAction || c.t == CardType.x2)) {
+          _showFlash(c,
+              title: c.t == CardType.x2 ? 'DOUBLE!' : null,
+              line: c.t == CardType.x2 ? '${p.name} doubles their numbers.' : '${p.name} drew it',
+              kind: c.t.name);
           return;
         }
       }
@@ -159,8 +196,8 @@ class _GameScreenState extends State<GameScreen> {
         if (!didPop) _confirmLeave();
       },
       child: Scaffold(
-        body: SafeArea(
-          child: ListenableBuilder(
+        body: TableBg(
+          child: SafeArea(child: ListenableBuilder(
             listenable: ctl,
             builder: (context, _) {
               final s = ctl.state;
@@ -192,7 +229,7 @@ class _GameScreenState extends State<GameScreen> {
                 if (overlay != null) overlay,
               ]);
             },
-          ),
+          )),
         ),
       ),
     );
@@ -200,71 +237,111 @@ class _GameScreenState extends State<GameScreen> {
 
   // ---------------- big action card ----------------
 
+  static const _revealBg = {
+    'freeze': Color(0xEB06304F),
+    'x2': Color(0xEB4A1200),
+    'neg': Color(0xEB3A0838),
+    'flip3': Color(0xEB1E0F52),
+    'sc': Color(0xEB06381F),
+    'saved': Color(0xEB06381F),
+    'bust': Color(0xEB5A0714),
+    'give': Color(0xEB06381F),
+  };
+
   Widget _reveal(GameState s, GameCard card, Decision? d) {
     final w = MediaQuery.of(context).size.width;
     final cw = (w * 0.42).clamp(130.0, 210.0).toDouble();
     final chooser = d == null ? null : s.players[d.player];
     final mine = d != null && ctl.canControl(d.player);
+    final kind = d == null ? _flashKind : card.t.name;
+    final title = d == null ? (_flashTitle ?? card.label) : card.label;
+    final isDup = kind == 'saved' || kind == 'bust';
     String line;
     if (d == null) {
-      line = '$_flashWho drew it';
+      line = _flashLine;
     } else if (mine) {
       line = '${chooser!.name}, pick a player';
     } else {
       line = '${chooser!.name} is choosing…';
     }
-    return Container(
-      color: const Color(0xE6071A1B),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(20),
-      child: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _FlipIn(key: ValueKey(card.id), width: cw, child: CardView(card, width: cw)),
-            const SizedBox(height: 16),
-            Text(card.label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: C.saffron, fontSize: 34, fontWeight: FontWeight.w900, height: 1.1)),
-            const SizedBox(height: 6),
-            Text(line, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            if (d != null && _kindHelp[d.kind] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(_kindHelp[d.kind]!,
-                    textAlign: TextAlign.center, style: const TextStyle(color: C.inkSoft, fontSize: 14)),
-              ),
-            if (d != null && mine) ...[
-              const SizedBox(height: 14),
-              for (final k in d.candidates)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: playerColor(k),
-                      foregroundColor: C.stockInk,
-                      minimumSize: const Size(double.infinity, 54),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    ),
-                    onPressed: () => ctl.act(d.player, 'target', target: k),
-                    child: Row(children: [
-                      Expanded(
-                        child: Text(
-                          s.players[k].name + (k == d.player ? ' (you)' : ''),
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                      Text('${valueOf(s, k)} now · ${s.players[k].total} total',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    ]),
+    final second = d == null ? _flashCard2 : null;
+    return Stack(children: [
+      Positioned.fill(child: ColoredBox(color: _revealBg[kind] ?? const Color(0xEB14060A))),
+      if (kind == 'freeze') const Positioned.fill(child: Particles(color: Colors.white)),
+      if (kind == 'x2') const Positioned.fill(child: Particles(color: Color(0xFFFF8A1F), up: true)),
+      Positioned.fill(
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  _FlipIn(
+                    key: ValueKey(card.id),
+                    width: cw,
+                    child: CardView(card, width: cw, duplicate: isDup),
                   ),
-                ),
-            ],
-          ]),
+                  if (second != null) ...[
+                    const SizedBox(width: 16),
+                    _FlipIn(
+                      key: ValueKey(second.id),
+                      width: cw * 0.78,
+                      child: CardView(second, width: cw * 0.78),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 18),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: kind == 'bust' ? Colors.white : C.saffron,
+                        fontSize: isDup || kind == 'x2' ? 42 : 34,
+                        fontWeight: FontWeight.w900,
+                        height: 1.1)),
+                const SizedBox(height: 6),
+                Text(line,
+                    textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                if (d != null && _kindHelp[d.kind] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(_kindHelp[d.kind]!,
+                        textAlign: TextAlign.center, style: const TextStyle(color: C.inkSoft, fontSize: 14)),
+                  ),
+                if (d != null && mine) ...[
+                  const SizedBox(height: 14),
+                  for (final k in d.candidates)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: playerColor(k),
+                          foregroundColor: C.stockInk,
+                          minimumSize: const Size(double.infinity, 54),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        ),
+                        onPressed: () => ctl.act(d.player, 'target', target: k),
+                        child: Row(children: [
+                          Expanded(
+                            child: Text(
+                              s.players[k].name + (k == d.player ? ' (you)' : ''),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          Text('${valueOf(s, k)} now · ${s.players[k].total} total',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        ]),
+                      ),
+                    ),
+                ],
+              ]),
+            ),
+          ),
         ),
       ),
-    );
+    ]);
   }
 
   // ---------------- top ----------------
@@ -407,14 +484,27 @@ class _GameScreenState extends State<GameScreen> {
     final col = playerColor(i);
     final v = scoreOf(h).value;
     final isTurn = s.pending?.player == i && (s.phase == 'deal' || s.phase == 'play');
+    final frozen = h.status == PStatus.frozen;
+    final bust = h.status == PStatus.bust;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      foregroundDecoration: frozen
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0x667FDBFF), Color(0x26FFFFFF), Color(0x737FDBFF)],
+              ),
+            )
+          : (bust ? BoxDecoration(borderRadius: BorderRadius.circular(12), color: const Color(0x40E5173F)) : null),
       decoration: BoxDecoration(
-        color: isTurn
-            ? col.withValues(alpha: 0.16)
-            : (h.status == PStatus.bust ? C.coral.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.18)),
+        color: isTurn ? col.withValues(alpha: 0.22) : Colors.black.withValues(alpha: 0.34),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isTurn ? col : col.withValues(alpha: 0.45), width: isTurn ? 3 : 1.5),
+        border: Border.all(
+          color: frozen ? C.ice : (bust ? C.red : (isTurn ? col : col.withValues(alpha: 0.5))),
+          width: isTurn || frozen || bust ? 3 : 1.5,
+        ),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -432,7 +522,31 @@ class _GameScreenState extends State<GameScreen> {
           Text('${p.total}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, height: 1)),
         ]),
         const SizedBox(height: 4),
-        Expanded(child: _hand(s, h)),
+        Expanded(
+          child: Stack(children: [
+            Positioned.fill(child: _hand(s, h)),
+            if (frozen)
+              const Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: Center(child: Icon(Icons.ac_unit, color: Colors.white, size: 38)),
+              ),
+            if (bust)
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Transform.rotate(
+                    angle: -0.2,
+                    child: const Text('BUST',
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                  ),
+                ),
+              ),
+          ]),
+        ),
         const SizedBox(height: 4),
         Row(children: [
           Expanded(
@@ -530,7 +644,7 @@ class _GameScreenState extends State<GameScreen> {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
-        color: Color(0xF5091E1F),
+        color: Color(0xF50E0306),
         border: Border(top: BorderSide(color: C.line)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -593,8 +707,8 @@ class _GameScreenState extends State<GameScreen> {
     switch (d.type) {
       case DType.draw:
         return Row(children: [
-          Expanded(child: Text.rich(TextSpan(children: [name, const TextSpan(text: ', your first draw is mandatory.')]))),
-          FilledButton(onPressed: () => ctl.act(d.player, 'draw'), child: const Text('Draw')),
+          Expanded(child: Text.rich(TextSpan(children: [name, const TextSpan(text: ', your first card is mandatory.')]))),
+          HitButton(onPressed: () => ctl.act(d.player, 'draw')),
         ]);
       case DType.turn:
         final h = p.hand;
@@ -612,7 +726,7 @@ class _GameScreenState extends State<GameScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 Text.rich(TextSpan(children: [
                   name,
-                  TextSpan(text: ', you have ${scoreOf(h).value} this round. Draw or stay?'),
+                  TextSpan(text: ', you have ${scoreOf(h).value} this round. Hit or stay?'),
                 ])),
                 Text(risk, style: const TextStyle(color: C.inkSoft, fontSize: 12)),
               ]),
@@ -623,8 +737,8 @@ class _GameScreenState extends State<GameScreen> {
                 onPressed: () => ctl.act(d.player, 'stay'),
                 child: const Text('Stay'),
               ),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: () => ctl.act(d.player, 'draw'), child: const Text('Draw')),
+              const SizedBox(width: 18),
+              HitButton(onPressed: () => ctl.act(d.player, 'draw')),
             ]),
           ],
         );
@@ -687,12 +801,18 @@ class _GameScreenState extends State<GameScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: over
-                ? FilledButton(
-                    onPressed: () {
-                      ctl.leave();
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Back to menu'))
+                ? Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    OutlinedButton(
+                        onPressed: () {
+                          ctl.leave();
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Leave')),
+                    if (ctl.canRestart)
+                      FilledButton(onPressed: ctl.restart, child: const Text('Play again'))
+                    else
+                      const Text('Waiting for the host to start a new game…', style: TextStyle(color: C.inkSoft)),
+                  ])
                 : (ctl.canAdvanceRound
                     ? FilledButton(onPressed: ctl.nextRound, child: const Text('Next round'))
                     : const Text('Waiting for the host to start the next round…',

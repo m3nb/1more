@@ -29,6 +29,10 @@ abstract class GameController extends ChangeNotifier {
   bool get canTakeOverSeats => false;
   void takeOverSeat(int i) {}
 
+  /// Whether this device may start a new game at the same table.
+  bool get canRestart => false;
+  void restart() {}
+
   /// A player whose seat the computer took over asks for it back.
   void reclaimSeat() {}
 
@@ -65,6 +69,15 @@ class EngineController extends GameController {
   @override
   void nextRound() {
     engine.nextRound();
+    changed();
+  }
+
+  @override
+  bool get canRestart => true;
+
+  @override
+  void restart() {
+    engine.newMatch();
     changed();
   }
 

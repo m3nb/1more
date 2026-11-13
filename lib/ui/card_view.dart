@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../engine/model.dart';
+import 'effects.dart';
 import 'theme.dart';
 
 class CardView extends StatelessWidget {
@@ -10,78 +11,107 @@ class CardView extends StatelessWidget {
   final bool fresh;
   const CardView(this.card, {super.key, this.width = 44, this.duplicate = false, this.fresh = false});
 
-  Color get _bg {
+  List<Color> get _colors {
     switch (card.t) {
       case CardType.num:
-        return C.stock;
+        final h = ((card.v * 47 + 350) % 360).toDouble();
+        return [
+          HSLColor.fromAHSL(1, h, 0.85, 0.56).toColor(),
+          HSLColor.fromAHSL(1, (h + 28) % 360, 0.9, 0.36).toColor(),
+        ];
       case CardType.add:
+        return const [Color(0xFFFFE27A), Color(0xFFF2A516)];
       case CardType.x2:
-        return C.saffron;
+        return const [Color(0xFFFFF06A), Color(0xFFFF7A1A), Color(0xFFD9121F)];
       case CardType.sc:
-        return C.mint;
+        return const [Color(0xFF8CF5B4), Color(0xFF12A95C)];
       case CardType.flip3:
-        return C.violet;
+        return const [Color(0xFFC9B6FF), Color(0xFF6A3DF0)];
       case CardType.freeze:
-        return C.ice;
+        return const [Color(0xFFE8FAFF), Color(0xFF39B6E8)];
       case CardType.neg:
-        return C.plum;
+        return const [Color(0xFFFF9AD5), Color(0xFFB3137E)];
     }
   }
 
-  String get _icon {
+  IconData? get _icon {
     switch (card.t) {
       case CardType.sc:
-        return '↺';
+        return Icons.favorite;
       case CardType.flip3:
-        return '3';
+        return Icons.filter_3;
       case CardType.freeze:
-        return '✱';
+        return Icons.ac_unit;
       case CardType.neg:
-        return '−';
+        return Icons.remove_circle;
+      case CardType.x2:
+        return Icons.local_fire_department;
       default:
-        return card.label;
+        return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final h = width * 1.4;
-    final numColor = HSLColor.fromAHSL(1, ((card.v * 29 + 190) % 360).toDouble(), 0.62, 0.34).toColor();
+    final radius = width * 0.16;
+    final light = card.t == CardType.add || card.t == CardType.freeze || card.t == CardType.sc;
+    final ink = light ? C.stockInk : Colors.white;
+    final shadow = [Shadow(color: Colors.black.withValues(alpha: light ? 0.0 : 0.45), offset: Offset(0, width * 0.03), blurRadius: 2)];
+
     Widget body;
     if (card.isAction) {
       body = Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(_icon, style: TextStyle(fontSize: width * 0.42, fontWeight: FontWeight.w900, color: C.stockInk, height: 1)),
-        const SizedBox(height: 2),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Text(card.label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: TextStyle(fontSize: width * 0.18, fontWeight: FontWeight.w800, color: C.stockInk, height: 1.05)),
-        ),
+        Icon(_icon, size: width * 0.5, color: ink),
+        if (width >= 34)
+          Padding(
+            padding: EdgeInsets.fromLTRB(2, width * 0.04, 2, 0),
+            child: Text(card.label.toUpperCase(),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: TextStyle(fontSize: width * 0.15, fontWeight: FontWeight.w900, color: ink, height: 1.05)),
+          ),
+      ]);
+    } else if (card.t == CardType.x2) {
+      body = Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (width >= 30) Icon(_icon, size: width * 0.34, color: Colors.white),
+        Text('×2',
+            style: TextStyle(
+                fontSize: width * 0.5, fontWeight: FontWeight.w900, color: Colors.white, height: 1, shadows: shadow)),
       ]);
     } else {
       body = Center(
         child: Text(card.label,
             style: TextStyle(
-              fontSize: width * (card.label.length > 2 ? 0.42 : 0.55),
+              fontSize: width * (card.label.length > 2 ? 0.42 : 0.58),
               fontWeight: FontWeight.w900,
-              color: card.isNumber ? numColor : C.stockInk,
+              color: ink,
               height: 1,
+              shadows: shadow,
             )),
       );
     }
+
     Widget c = Container(
       width: width,
       height: h,
       decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(width * 0.16),
-        border: duplicate ? Border.all(color: C.coral, width: 3) : null,
-        boxShadow: const [BoxShadow(color: Color(0x59000000), offset: Offset(0, 2))],
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: _colors),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: duplicate ? Colors.white : Colors.white.withValues(alpha: 0.75),
+          width: duplicate ? 3 : (width * 0.04).clamp(1.0, 4.0).toDouble(),
+        ),
+        boxShadow: [
+          if (duplicate) const BoxShadow(color: C.red, blurRadius: 16, spreadRadius: 3),
+          const BoxShadow(color: Color(0x73000000), offset: Offset(0, 2), blurRadius: 3),
+        ],
       ),
       child: body,
     );
+    if (card.t == CardType.x2) {
+      c = Pulse(color: const Color(0xFFFF6A00), radius: radius, spread: width * 0.45, child: c);
+    }
     if (duplicate) c = Transform.rotate(angle: -0.1, child: c);
     if (fresh) {
       c = TweenAnimationBuilder<double>(

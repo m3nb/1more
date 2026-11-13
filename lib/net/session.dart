@@ -45,6 +45,7 @@ class OnlineSession extends ChangeNotifier {
 
   List<LobbySeat> seats = [];
   int target = 200;
+  int deckMode = 0;
   bool connected = false;
   String? note;
   String? fatal;
@@ -111,7 +112,7 @@ class OnlineSession extends ChangeNotifier {
   // ---------------- host ----------------
 
   Future<void> _sendLobby() =>
-      link.send('lobby', {'seats': seats.map((s) => s.toJson()).toList(), 'target': target});
+      link.send('lobby', {'seats': seats.map((s) => s.toJson()).toList(), 'target': target, 'dm': deckMode});
 
   void addCpu(String persona) {
     if (!isHost || started || seats.length >= 8) return;
@@ -141,10 +142,17 @@ class OnlineSession extends ChangeNotifier {
     _notify();
   }
 
+  void setDeckMode(int mode) {
+    if (!isHost || started) return;
+    deckMode = mode;
+    _sendLobby();
+    _notify();
+  }
+
   void startGame() {
     if (!isHost || started || seats.length < 2) return;
     final players = [for (final s in seats) Player(name: s.name, type: s.type, clientId: s.cid)];
-    controller = HostController(this, Engine.newGame(players, target));
+    controller = HostController(this, Engine.newGame(players, target, deckMode: deckMode));
     (controller as HostController).broadcast();
     _notify();
   }
@@ -193,6 +201,7 @@ class OnlineSession extends ChangeNotifier {
         case 'lobby':
           seats = (m['seats'] as List).map(LobbySeat.fromJson).toList();
           target = (m['target'] as num).toInt();
+          deckMode = (m['dm'] as num?)?.toInt() ?? 0;
           note = null;
           _notify();
           break;

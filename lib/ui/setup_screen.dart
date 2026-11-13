@@ -31,6 +31,35 @@ class TargetPicker extends StatelessWidget {
       ]);
 }
 
+/// Which cards are in the deck.
+class DeckModePicker extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const DeckModePicker({super.key, required this.value, required this.onChanged});
+
+  static const _help = [
+    'Everything: bonus cards and all four action cards.',
+    'Numbers plus the +2 to +10 and ×2 bonus cards. No Freeze, Flip 3, Second Chance or Negative.',
+    'Only the number cards 0 to 12. Pure luck and nerve.',
+  ];
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (var i = 0; i < kDeckModes.length; i++)
+            ChoiceChip(
+              label: Text(kDeckModes[i], style: const TextStyle(fontWeight: FontWeight.w800)),
+              selected: i == value,
+              selectedColor: C.saffron,
+              labelStyle: TextStyle(color: i == value ? C.stockInk : C.ink),
+              onSelected: (_) => onChanged(i),
+            ),
+        ]),
+        const SizedBox(height: 6),
+        Text(_help[value], style: const TextStyle(color: C.inkSoft, fontSize: 12)),
+      ]);
+}
+
 /// Computer characters, as "Name · Title".
 final Map<String, String> cpuTypes = {
   for (final e in kPersonas.entries) e.key: '${e.value.name} · ${e.value.title}',
@@ -61,6 +90,7 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
     SeatDraft('Vex', 'vex'),
   ];
   int target = 200;
+  int deckMode = 0;
   bool fast = false;
 
   void _start() {
@@ -71,7 +101,7 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
           type: seats[i].type,
         )
     ];
-    final ctl = EngineController(Engine.newGame(players, target), fast: fast);
+    final ctl = EngineController(Engine.newGame(players, target, deckMode: deckMode), fast: fast);
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => GameScreen(controller: ctl)))
         .then((_) => ctl.dispose());
@@ -184,6 +214,9 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Label('Points to win'),
                 TargetPicker(value: target, onChanged: (t) => setState(() => target = t)),
+                const SizedBox(height: 16),
+                const Label('Cards'),
+                DeckModePicker(value: deckMode, onChanged: (m) => setState(() => deckMode = m)),
                 const SizedBox(height: 16),
                 const Label('Computer speed'),
                 SegmentedButton<bool>(

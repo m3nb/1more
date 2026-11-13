@@ -258,6 +258,15 @@ class GameState {
   int? lastCardId;
   int version;
 
+  /// 0 = every card, 1 = no action cards, 2 = number cards only.
+  int deckMode;
+
+  /// The latest moment worth a big on-screen callout (a bust, a save).
+  int evId;
+  String? evType;
+  int evPlayer;
+  int evValue;
+
   GameState({
     required this.players,
     required this.target,
@@ -277,6 +286,11 @@ class GameState {
     this.tie = false,
     this.lastCardId,
     this.version = 0,
+    this.deckMode = 0,
+    this.evId = 0,
+    this.evType,
+    this.evPlayer = 0,
+    this.evValue = 0,
   })  : discard = discard ?? [],
         order = order ?? [],
         flips = flips ?? [],
@@ -309,6 +323,8 @@ class GameState {
       'tie': tie,
       if (lastCardId != null) 'last': lastCardId,
       'ver': version,
+      'dm': deckMode,
+      'ev': [evId, evType ?? '', evPlayer, evValue],
     };
   }
 
@@ -333,6 +349,11 @@ class GameState {
       tie: m['tie'] as bool,
       lastCardId: m['last'] == null ? null : _int(m['last']),
       version: _int(m['ver']),
+      deckMode: m['dm'] == null ? 0 : _int(m['dm']),
+      evId: m['ev'] == null ? 0 : _int((m['ev'] as List)[0]),
+      evType: m['ev'] == null || (m['ev'] as List)[1] == '' ? null : (m['ev'] as List)[1] as String,
+      evPlayer: m['ev'] == null ? 0 : _int((m['ev'] as List)[2]),
+      evValue: m['ev'] == null ? 0 : _int((m['ev'] as List)[3]),
     );
   }
 

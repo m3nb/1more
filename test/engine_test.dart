@@ -35,6 +35,38 @@ void main() {
     }
   });
 
+  test('deck modes drop the action cards, then the bonus cards', () {
+    expect(buildDeck(Random(1), 1).length, 85);
+    expect(buildDeck(Random(1), 1).any((c) => c.isAction), isFalse);
+    expect(buildDeck(Random(1), 2).length, 79);
+    expect(buildDeck(Random(1), 2).every((c) => c.isNumber), isTrue);
+  });
+
+  test('a new match keeps the table and clears the scores', () {
+    final e = Engine.newGame(
+      [Player(name: 'A', type: 'rocky'), Player(name: 'B', type: 'sage')],
+      200,
+      rng: Random(9),
+      deckMode: 2,
+    );
+    var steps = 0;
+    while (e.s.phase != 'gameOver' && steps++ < 20000) {
+      if (e.s.phase == 'roundEnd') {
+        e.nextRound();
+        continue;
+      }
+      final m = decideAi(e.s, Random(steps));
+      e.apply(e.s.pending!.player, m.type, target: m.target);
+    }
+    expect(e.s.phase, 'gameOver');
+    e.newMatch();
+    expect(e.s.phase, 'deal');
+    expect(e.s.round, 1);
+    expect(e.s.winner, isNull);
+    expect(e.s.players.every((p) => p.total == 0), isTrue);
+    expect(e.s.cardsInPlay(), 79);
+  });
+
   group('scoring', () {
     test('×2 doubles numbers only, then + cards', () {
       final h = RoundHand(nums: [n(1, 5), n(2, 8), n(3, 10)], mods: [
@@ -102,6 +134,8 @@ void main() {
       e.apply(0, 'draw'); // 7 again
       final h = e.s.players[0].hand;
       expect(h.status, PStatus.active);
+      expect(e.s.evType, 'saved');
+      expect(e.s.evValue, 7);
       expect(h.sc, 0);
       expect(h.nums.map((c) => c.v), [7]);
     });

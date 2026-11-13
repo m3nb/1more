@@ -7,7 +7,10 @@ const List<int> kTargets = [200, 250, 300, 350, 400];
 
 /// 0 once, 1 once, 2 twice ... 12 twelve times (79 cards), one each of
 /// +2 +4 +6 +8 +10 and ×2, and two of each action card.
-List<GameCard> buildDeck(Random rng) {
+/// Deck modes: 0 = every card, 1 = no action cards, 2 = number cards only.
+const List<String> kDeckModes = ['Power cards', 'No action cards', 'Numbers only'];
+
+List<GameCard> buildDeck(Random rng, [int mode = 0]) {
   var id = 0;
   final d = <GameCard>[GameCard(++id, CardType.num, 0)];
   for (var v = 1; v <= 12; v++) {
@@ -15,13 +18,17 @@ List<GameCard> buildDeck(Random rng) {
       d.add(GameCard(++id, CardType.num, v));
     }
   }
-  for (final v in [2, 4, 6, 8, 10]) {
-    d.add(GameCard(++id, CardType.add, v));
+  if (mode < 2) {
+    for (final v in [2, 4, 6, 8, 10]) {
+      d.add(GameCard(++id, CardType.add, v));
+    }
+    d.add(GameCard(++id, CardType.x2));
   }
-  d.add(GameCard(++id, CardType.x2));
-  for (final t in [CardType.sc, CardType.flip3, CardType.freeze, CardType.neg]) {
-    d.add(GameCard(++id, t));
-    d.add(GameCard(++id, t));
+  if (mode < 1) {
+    for (final t in [CardType.sc, CardType.flip3, CardType.freeze, CardType.neg]) {
+      d.add(GameCard(++id, t));
+      d.add(GameCard(++id, t));
+    }
   }
   d.shuffle(rng);
   return d;
@@ -36,15 +43,36 @@ class Engine {
 
   Engine(this.s, [Random? rng]) : rng = rng ?? Random();
 
-  static Engine newGame(List<Player> players, int target, {Random? rng}) {
+  static Engine newGame(List<Player> players, int target, {Random? rng, int deckMode = 0}) {
     final r = rng ?? Random();
-    final s = GameState(players: players, target: target, deck: buildDeck(r));
+    final s = GameState(players: players, target: target, deck: buildDeck(r, deckMode), deckMode: deckMode);
     final e = Engine(s, r);
     e.startRound();
     return e;
   }
 
   int get n => s.players.length;
+
+  /// Same table, same settings, scores back to zero.
+  void newMatch() {
+    for (final p in s.players) {
+      p.total = 0;
+    }
+    s.deck = buildDeck(rng, s.deckMode);
+    s.discard = [];
+    s.round = 1;
+    s.starter = 0;
+    s.winner = null;
+    s.log = [];
+    startRound();
+  }
+
+  void _emit(String type, int player, int value) {
+    s.evId++;
+    s.evType = type;
+    s.evPlayer = player;
+    s.evValue = value;
+  }
 
   void _log(String t) {
     s.log.insert(0, t);
@@ -205,9 +233,11 @@ class Engine {
               ..add(scCard)
               ..add(c);
             _log('${p.name} drew a duplicate ${c.v}. Second Chance saved them.');
+            _emit('saved', i, c.v);
           } else {
             h.status = PStatus.bust;
             h.bust = c;
+            _emit('bust', i, c.v);
             if (h.neg) {
               _log('${p.name} drew a duplicate ${c.v} with a Negative: ${-scoreOf(h).value} deducted.');
             } else {

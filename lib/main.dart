@@ -5,6 +5,7 @@ import 'config.dart';
 import 'engine/model.dart';
 import 'net/session.dart';
 import 'ui/card_view.dart';
+import 'ui/effects.dart';
 import 'ui/lobby_screen.dart';
 import 'ui/setup_screen.dart';
 import 'ui/theme.dart';
@@ -73,8 +74,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final fan = const [GameCard(-1, CardType.num, 7), GameCard(-2, CardType.x2), GameCard(-3, CardType.freeze)];
     return Scaffold(
-      body: SafeArea(
-        child: Center(
+      body: TableBg(
+        child: SafeArea(child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -162,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const Panel(child: _Rules()),
             ]),
           ),
-        ),
+        )),
       ),
     );
   }
@@ -181,6 +182,7 @@ class _Rules extends StatelessWidget {
     'Freeze and Negative only go to players still in the round. If you\'re the only one left, they land on you.',
     'After seven numbers you may keep going. A duplicate after that loses the whole round, bonus included.',
     'When someone reaches the target at the end of a round, the highest total wins.',
+    'Before a game you choose the deck: every card, no action cards, or numbers only.',
   ];
 
   @override

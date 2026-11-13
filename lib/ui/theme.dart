@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
 class C {
-  static const felt = Color(0xFF0E2B2C);
-  static const felt2 = Color(0xFF143A3B);
-  static const line = Color(0xFF24524F);
-  static const ink = Color(0xFFEEF3EA);
-  static const inkSoft = Color(0xFFA9C1BB);
-  static const stock = Color(0xFFF6EFE0);
-  static const stockInk = Color(0xFF1D2423);
-  static const saffron = Color(0xFFF2B134);
-  static const coral = Color(0xFFFF6F5E);
-  static const ice = Color(0xFF86D6F2);
-  static const mint = Color(0xFF73DBA0);
-  static const plum = Color(0xFFE46BB0);
+  static const felt = Color(0xFF12050A);
+  static const felt2 = Color(0xFF2B0A14);
+  static const line = Color(0xFF7A1F31);
+  static const ink = Color(0xFFFFF6EE);
+  static const inkSoft = Color(0xFFE2B6B6);
+  static const stock = Color(0xFFFFF1DC);
+  static const stockInk = Color(0xFF1C080C);
+  static const saffron = Color(0xFFFFC83D);
+  static const red = Color(0xFFE5173F);
+  static const coral = Color(0xFFFF5A6A);
+  static const ice = Color(0xFF7FDBFF);
+  static const mint = Color(0xFF5BE39A);
+  static const plum = Color(0xFFFF6FC4);
   static const violet = Color(0xFFB39BFF);
 }
 
