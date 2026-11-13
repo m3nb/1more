@@ -47,12 +47,12 @@ class _FlipIn extends StatelessWidget {
     );
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 700),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 620),
+      curve: Curves.easeOutQuart,
       builder: (context, t, _) {
         final angle = (1 - t) * pi;
         return Transform.scale(
-          scale: 0.45 + 0.55 * t,
+          scale: 0.7 + 0.3 * t,
           child: Transform(
             alignment: Alignment.center,
             transform: Matrix4.identity()
@@ -147,7 +147,7 @@ class _GameScreenState extends State<GameScreen> {
               kind: 'saved',
               ms: 2800);
         } else {
-          _showFlash(dup, title: 'BUST!', line: '$name drew a second ${s.evValue}.', kind: 'bust', ms: 1300);
+          _showFlash(dup, title: 'BUST!', line: '$name drew a second ${s.evValue}.', kind: 'bust', ms: 1500);
         }
         return;
       }
@@ -212,11 +212,14 @@ class _GameScreenState extends State<GameScreen> {
               }
               final playing = s.phase == 'deal' || s.phase == 'play';
               final d = s.pending;
-              Widget? overlay;
+              Widget overlay = const SizedBox.shrink(key: ValueKey('none'));
               if (playing && d != null && d.type == DType.target && d.card != null) {
-                overlay = Positioned.fill(child: _reveal(s, d.card!, d));
+                overlay = SizedBox.expand(key: ValueKey('pick${d.card!.id}'), child: _reveal(s, d.card!, d));
               } else if (_flash != null) {
-                overlay = Positioned.fill(child: IgnorePointer(child: _reveal(s, _flash!, null)));
+                overlay = SizedBox.expand(
+                  key: ValueKey('flash${_flash!.id}'),
+                  child: IgnorePointer(child: _reveal(s, _flash!, null)),
+                );
               }
               return Stack(children: [
                 Column(children: [
@@ -226,7 +229,15 @@ class _GameScreenState extends State<GameScreen> {
                   Expanded(child: _table(s)),
                   _bottom(s),
                 ]),
-                if (overlay != null) overlay,
+                Positioned.fill(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    reverseDuration: const Duration(milliseconds: 320),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: overlay,
+                  ),
+                ),
               ]);
             },
           )),
@@ -486,7 +497,9 @@ class _GameScreenState extends State<GameScreen> {
     final isTurn = s.pending?.player == i && (s.phase == 'deal' || s.phase == 'play');
     final frozen = h.status == PStatus.frozen;
     final bust = h.status == PStatus.bust;
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       foregroundDecoration: frozen
           ? BoxDecoration(

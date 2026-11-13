@@ -117,11 +117,17 @@ class CardView extends StatelessWidget {
       c = TweenAnimationBuilder<double>(
         key: ValueKey(card.id),
         tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutBack,
+        duration: const Duration(milliseconds: 520),
+        curve: Curves.easeOutCubic,
         builder: (_, t, child) => Opacity(
-          opacity: t.clamp(0.0, 1.0),
-          child: Transform.translate(offset: Offset(0, (1 - t) * -14), child: child),
+          opacity: (t * 2.5).clamp(0.0, 1.0),
+          child: Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.002)
+              ..rotateY((1 - t) * 1.5),
+            child: Transform.scale(scale: 0.6 + 0.4 * t, child: child),
+          ),
         ),
         child: c,
       );

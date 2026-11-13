@@ -26,10 +26,12 @@ class _ParticlesState extends State<Particles> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (context, _) =>
-              CustomPaint(painter: _ParticlePainter(_c.value, widget.color, widget.up), size: Size.infinite),
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) =>
+                CustomPaint(painter: _ParticlePainter(_c.value, widget.color, widget.up), size: Size.infinite),
+          ),
         ),
       );
 }

@@ -46,6 +46,8 @@ class EngineController extends GameController {
   final Random _rng = Random();
   Timer? _timer;
   bool _disposed = false;
+  int _lastEvent = 0;
+  int? _lastCard;
 
   EngineController(this.engine, {this.fast = false}) {
     scheduleCpu();
@@ -95,7 +97,22 @@ class EngineController extends GameController {
     if (d == null) return;
     final p = engine.s.players[d.player];
     if (!p.isCpu) return;
-    _timer = Timer(Duration(milliseconds: fast ? 250 : 800), () {
+    // Leave room for the on-screen moment (bust, save, action card, ×2).
+    var pause = 0;
+    final s = engine.s;
+    if (s.evId != _lastEvent) {
+      _lastEvent = s.evId;
+      pause = s.evType == 'saved' ? 2600 : 1400;
+    }
+    if (s.lastCardId != _lastCard) {
+      _lastCard = s.lastCardId;
+      final special = s.players.any((q) =>
+          q.hand.acts.any((c) => c.id == _lastCard) ||
+          q.hand.mods.any((c) => c.id == _lastCard && c.t == CardType.x2));
+      if (special && pause == 0) pause = 1500;
+    }
+    if (fast) pause = pause ~/ 3;
+    _timer = Timer(Duration(milliseconds: (fast ? 250 : 900) + pause), () {
       if (_disposed || engine.s.pending != d) return;
       final m = decideAi(engine.s, _rng);
       if (engine.apply(d.player, m.type, target: m.target)) changed();
