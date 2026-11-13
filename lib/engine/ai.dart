@@ -145,8 +145,15 @@ int _strategicTarget(GameState s, Decision d) {
         return 2 * v * (1 + s.players[k].total / max(1, s.target));
       });
   }
-  return opp.isNotEmpty ? opp.first : cands.first;
+  if (opp.isEmpty) return cands.first;
+  if (d.kind == 'onemore') {
+    return _best(opp, (k) => dupChance(s, k) * max(0, valueOf(s, k)) + s.players[k].total * 0.05);
+  }
+  // Minus, ÷2, Steal, Swap: aim at whoever is closest to winning.
+  return _best(opp, (k) => s.players[k].total + max(0, valueOf(s, k)) * 1.5);
 }
+
+const _hostile = {'minus', 'div2', 'onemore', 'steal', 'swap'};
 
 /// Vex: everything goes at the player with the highest total.
 int? _vexTarget(GameState s, Decision d) {
@@ -159,6 +166,7 @@ int? _vexTarget(GameState s, Decision d) {
     return t != 0 ? t : valueOf(s, b) - valueOf(s, a);
   });
   final leader = opp.first;
+  if (_hostile.contains(d.kind)) return leader;
   switch (d.kind) {
     case 'neg':
       // A Negative only hurts someone with positive points.
@@ -181,6 +189,9 @@ int? _vexTarget(GameState s, Decision d) {
 int? _hexTarget(GameState s, Decision d) {
   final me = d.player;
   final people = d.candidates.where((k) => k != me && s.players[k].isPerson).toList();
+  if (_hostile.contains(d.kind)) {
+    return people.isEmpty ? null : _best(people, (k) => (s.players[k].total + valueOf(s, k)).toDouble());
+  }
   switch (d.kind) {
     case 'neg':
       final hurt = people.where((k) => valueOf(s, k) > 0).toList();

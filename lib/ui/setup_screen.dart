@@ -41,6 +41,7 @@ class DeckModePicker extends StatelessWidget {
     'Everything: bonus cards and all four action cards.',
     'Numbers plus the +2 to +10 and ×2 bonus cards. No Freeze, Flip 3, Second Chance or Negative.',
     'Only the number cards 0 to 12. Pure luck and nerve.',
+    'Everything, plus Steal, Swap, ÷2, minus cards, One More and Shield.',
   ];
 
   @override

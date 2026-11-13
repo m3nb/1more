@@ -22,6 +22,11 @@ const _kindHelp = {
   'neg': 'Their round points flip to negative.',
   'flip3': 'They must draw 3 cards in a row.',
   'give': 'You already hold one, so this one goes to another player.',
+  'minus': 'These points come off their round.',
+  'div2': 'Their number cards count for half.',
+  'onemore': 'They draw one card, then must stop.',
+  'steal': 'You take their highest number you do not have.',
+  'swap': 'Your lowest number for their highest.',
 };
 
 /// A card that turns over from its back as it appears.
@@ -146,8 +151,14 @@ class _GameScreenState extends State<GameScreen> {
               line: 'Second Chance saved $name. Both cards are discarded.',
               kind: 'saved',
               ms: 2800);
-        } else {
+        } else if (s.evType == 'bust') {
           _showFlash(dup, title: 'BUST!', line: '$name drew a second ${s.evValue}.', kind: 'bust', ms: 1500);
+        } else if (s.evType == 'seven') {
+          _showFlash(GameCard(-900 - s.evId, CardType.add, 15),
+              title: 'SEVEN!', line: '$name has seven different numbers.', kind: 'seven', ms: 1900);
+        } else if (s.evType == 'shield') {
+          _showFlash(GameCard(-900 - s.evId, CardType.shield),
+              title: 'BLOCKED!', line: "$name's Shield stopped it.", kind: 'shield', ms: 1800);
         }
         return;
       }
@@ -257,6 +268,10 @@ class _GameScreenState extends State<GameScreen> {
     'saved': Color(0xEB06381F),
     'bust': Color(0xEB5A0714),
     'give': Color(0xEB06381F),
+    'seven': Color(0xEB4A3300),
+    'shield': Color(0xEB1F2A3D),
+    'minus': Color(0xEB101018),
+    'steal': Color(0xEB4A1E00),
   };
 
   Widget _reveal(GameState s, GameCard card, Decision? d) {

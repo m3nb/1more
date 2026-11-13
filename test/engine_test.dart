@@ -42,6 +42,95 @@ void main() {
     expect(buildDeck(Random(1), 2).every((c) => c.isNumber), isTrue);
   });
 
+  group('chaos deck', () {
+    test('has 107 cards', () {
+      expect(buildDeck(Random(1), 3).length, kChaosDeckSize);
+    });
+
+    test('÷2 halves the numbers and minus cards subtract', () {
+      final h = RoundHand(nums: [n(1, 5), n(2, 8), n(3, 10)], mods: [
+        const GameCard(4, CardType.x2),
+        const GameCard(5, CardType.div2),
+        const GameCard(6, CardType.minus, 6),
+        const GameCard(7, CardType.add, 4),
+      ]);
+      expect(scoreOf(h).value, 23 + 4 - 6);
+    });
+
+    test('Shield blocks a Freeze aimed at its holder', () {
+      final e = rigged([const GameCard(1, CardType.shield), n(2, 4), n(3, 5), const GameCard(4, CardType.freeze)]);
+      e.apply(0, 'draw'); // Shield
+      e.apply(1, 'draw'); // 4
+      e.apply(0, 'draw'); // 5
+      e.apply(1, 'draw'); // Freeze
+      e.apply(1, 'target', target: 0);
+      expect(e.s.players[0].hand.status, PStatus.active);
+      expect(e.s.players[0].hand.shield, 0);
+      expect(e.s.evType, 'shield');
+    });
+
+    test('Steal takes the highest number', () {
+      final e = rigged([n(1, 3), n(2, 9), n(3, 4), const GameCard(4, CardType.steal)], players: 3);
+      e.apply(0, 'draw'); // 3
+      e.apply(1, 'draw'); // 9
+      e.apply(2, 'draw'); // 4
+      e.apply(0, 'draw'); // Steal
+      e.apply(0, 'target', target: 1);
+      expect(e.s.players[0].hand.nums.map((c) => c.v).toList()..sort(), [3, 9]);
+      expect(e.s.players[1].hand.nums, isEmpty);
+    });
+
+    test('One More: one card, then the player has to stop', () {
+      final e = rigged([n(1, 3), n(2, 9), const GameCard(3, CardType.onemore), n(4, 6)]);
+      e.apply(0, 'draw'); // 3
+      e.apply(1, 'draw'); // 9
+      e.apply(0, 'draw'); // One More
+      e.apply(0, 'target', target: 1);
+      expect(e.s.players[1].hand.nums.map((c) => c.v).toList(), [9, 6]);
+      expect(e.s.players[1].hand.status, PStatus.stayed);
+    });
+
+    test('full chaos games finish and never lose a card', () {
+      for (var seed = 0; seed < 40; seed++) {
+        final rng = Random(seed);
+        final players = [
+          for (var i = 0; i < 2 + seed % 7; i++)
+            Player(name: 'C$i', type: i == 0 && seed.isEven ? 'human' : ['rocky', 'sage', 'vex', 'hex'][i % 4])
+        ];
+        final e = Engine.newGame(players, 200, rng: rng, deckMode: 3);
+        var steps = 0;
+        while (e.s.phase != 'gameOver') {
+          expect(++steps, lessThan(30000), reason: 'seed $seed did not finish');
+          if (e.s.phase == 'roundEnd') {
+            e.nextRound();
+            continue;
+          }
+          final m = decideAi(e.s, rng);
+          expect(e.apply(e.s.pending!.player, m.type, target: m.target), isTrue);
+          if (e.s.phase == 'deal' || e.s.phase == 'play') {
+            expect(e.s.cardsInPlay(), kChaosDeckSize, reason: 'seed $seed');
+          }
+        }
+      }
+    });
+
+    test('a round limit ends the game', () {
+      final e = Engine.newGame([Player(name: 'Solo', type: 'sage')], 99999, rng: Random(3), deckMode: 1, maxRounds: 2);
+      var steps = 0;
+      while (e.s.phase != 'gameOver' && steps++ < 5000) {
+        if (e.s.phase == 'roundEnd') {
+          e.nextRound();
+          continue;
+        }
+        final m = decideAi(e.s, Random(steps));
+        e.apply(e.s.pending!.player, m.type, target: m.target);
+      }
+      expect(e.s.phase, 'gameOver');
+      expect(e.s.round, 2);
+      expect(e.s.winner, 0);
+    });
+  });
+
   test('a new match keeps the table and clears the scores', () {
     final e = Engine.newGame(
       [Player(name: 'A', type: 'rocky'), Player(name: 'B', type: 'sage')],

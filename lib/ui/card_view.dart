@@ -31,6 +31,18 @@ class CardView extends StatelessWidget {
         return const [Color(0xFFE8FAFF), Color(0xFF39B6E8)];
       case CardType.neg:
         return const [Color(0xFFFF9AD5), Color(0xFFB3137E)];
+      case CardType.div2:
+        return const [Color(0xFFA9B2FF), Color(0xFF2A2F9A)];
+      case CardType.minus:
+        return const [Color(0xFF6B6B80), Color(0xFF14141E)];
+      case CardType.steal:
+        return const [Color(0xFFFFB86B), Color(0xFFC2410C)];
+      case CardType.swap:
+        return const [Color(0xFF7CEDE9), Color(0xFF0D7780)];
+      case CardType.onemore:
+        return const [Color(0xFFFFD86B), Color(0xFFD9123A)];
+      case CardType.shield:
+        return const [Color(0xFFF2F4FA), Color(0xFF8B96AB)];
     }
   }
 
@@ -46,6 +58,14 @@ class CardView extends StatelessWidget {
         return Icons.remove_circle;
       case CardType.x2:
         return Icons.local_fire_department;
+      case CardType.steal:
+        return Icons.back_hand;
+      case CardType.swap:
+        return Icons.swap_horiz;
+      case CardType.onemore:
+        return Icons.plus_one;
+      case CardType.shield:
+        return Icons.shield;
       default:
         return null;
     }
@@ -55,12 +75,16 @@ class CardView extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = width * 1.4;
     final radius = width * 0.16;
-    final light = card.t == CardType.add || card.t == CardType.freeze || card.t == CardType.sc;
+    final light = card.t == CardType.add ||
+        card.t == CardType.freeze ||
+        card.t == CardType.sc ||
+        card.t == CardType.shield;
+    final asText = card.t == CardType.minus || card.t == CardType.div2;
     final ink = light ? C.stockInk : Colors.white;
     final shadow = [Shadow(color: Colors.black.withValues(alpha: light ? 0.0 : 0.45), offset: Offset(0, width * 0.03), blurRadius: 2)];
 
     Widget body;
-    if (card.isAction) {
+    if (card.isAction && !asText) {
       body = Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(_icon, size: width * 0.5, color: ink),
         if (width >= 34)

@@ -182,7 +182,8 @@ class _Rules extends StatelessWidget {
     'Freeze and Negative only go to players still in the round. If you\'re the only one left, they land on you.',
     'After seven numbers you may keep going. A duplicate after that loses the whole round, bonus included.',
     'When someone reaches the target at the end of a round, the highest total wins.',
-    'Before a game you choose the deck: every card, no action cards, or numbers only.',
+    'Before a game you choose the deck: every card, no action cards, numbers only, or Chaos.',
+    'Chaos adds: Steal (take a rival\'s best number), Swap (your lowest for their highest), ÷2 and minus cards (aimed at a rival), One More (one card, then they must stop) and Shield (blocks one card aimed at you).',
   ];
 
   @override

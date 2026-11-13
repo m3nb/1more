@@ -8,7 +8,9 @@ const List<int> kTargets = [200, 250, 300, 350, 400];
 /// 0 once, 1 once, 2 twice ... 12 twelve times (79 cards), one each of
 /// +2 +4 +6 +8 +10 and ×2, and two of each action card.
 /// Deck modes: 0 = every card, 1 = no action cards, 2 = number cards only.
-const List<String> kDeckModes = ['Power cards', 'No action cards', 'Numbers only'];
+/// 3 = chaos: every card plus Steal, Swap, ÷2, minus cards, One More and Shield.
+const List<String> kDeckModes = ['Power cards', 'No action cards', 'Numbers only', 'Chaos'];
+const int kChaosDeckSize = 107;
 
 List<GameCard> buildDeck(Random rng, [int mode = 0]) {
   var id = 0;
@@ -18,14 +20,24 @@ List<GameCard> buildDeck(Random rng, [int mode = 0]) {
       d.add(GameCard(++id, CardType.num, v));
     }
   }
-  if (mode < 2) {
+  if (mode != 2) {
     for (final v in [2, 4, 6, 8, 10]) {
       d.add(GameCard(++id, CardType.add, v));
     }
     d.add(GameCard(++id, CardType.x2));
   }
-  if (mode < 1) {
+  if (mode == 0 || mode == 3) {
     for (final t in [CardType.sc, CardType.flip3, CardType.freeze, CardType.neg]) {
+      d.add(GameCard(++id, t));
+      d.add(GameCard(++id, t));
+    }
+  }
+  if (mode == 3) {
+    for (final v in [2, 4, 6, 8, 10]) {
+      d.add(GameCard(++id, CardType.minus, v));
+    }
+    d.add(GameCard(++id, CardType.div2));
+    for (final t in [CardType.steal, CardType.swap, CardType.onemore, CardType.shield]) {
       d.add(GameCard(++id, t));
       d.add(GameCard(++id, t));
     }
@@ -43,9 +55,10 @@ class Engine {
 
   Engine(this.s, [Random? rng]) : rng = rng ?? Random();
 
-  static Engine newGame(List<Player> players, int target, {Random? rng, int deckMode = 0}) {
+  static Engine newGame(List<Player> players, int target, {Random? rng, int deckMode = 0, int maxRounds = 0}) {
     final r = rng ?? Random();
-    final s = GameState(players: players, target: target, deck: buildDeck(r, deckMode), deckMode: deckMode);
+    final s = GameState(
+        players: players, target: target, deck: buildDeck(r, deckMode), deckMode: deckMode, maxRounds: maxRounds);
     final e = Engine(s, r);
     e.startRound();
     return e;
@@ -167,7 +180,12 @@ class Engine {
       // Flip 3 draws happen before the turn moves on.
       if (s.flips.isNotEmpty) {
         final f = s.flips.last;
-        if (!s.players[f.target].hand.active || f.remaining <= 0) {
+        final fp = s.players[f.target];
+        if (!fp.hand.active || f.remaining <= 0) {
+          if (f.stay && fp.hand.active) {
+            fp.hand.status = PStatus.stayed;
+            _log('${fp.name} had One More and must stop on ${scoreOf(fp.hand).value}.');
+          }
           s.flips.removeLast();
           continue;
         }
@@ -247,7 +265,10 @@ class Engine {
         } else {
           h.nums.add(c);
           _log('${p.name} drew ${c.v}.');
-          if (h.nums.length == 7) _log('${p.name} has seven different numbers: +15!');
+          if (h.nums.length == 7) {
+            _log('${p.name} has seven different numbers: +15!');
+            _emit('seven', i, 0);
+          }
         }
         break;
       case CardType.add:
@@ -285,7 +306,65 @@ class Engine {
         _log('${p.name} drew Flip 3.');
         _ask(i, 'flip3', [for (var k = 0; k < n; k++) if (s.players[k].hand.active) k], c);
         break;
+      case CardType.minus:
+      case CardType.div2:
+      case CardType.onemore:
+        _log('${p.name} drew ${c.label}.');
+        _ask(i, c.t.name, [for (var k = 0; k < n; k++) if (s.players[k].hand.active) k], c);
+        break;
+      case CardType.steal:
+      case CardType.swap:
+        _log('${p.name} drew ${c.label}.');
+        final cands = [
+          for (var k = 0; k < n; k++)
+            if (k != i &&
+                s.players[k].hand.active &&
+                (c.t == CardType.steal ? _stealPick(i, k) != null : _swapPick(i, k) != null))
+              k
+        ];
+        if (cands.isEmpty) {
+          s.discard.add(c);
+          _log('Nothing to ${c.t == CardType.steal ? 'steal' : 'swap'}. Discarded.');
+        } else {
+          _ask(i, c.t.name, cands, c);
+        }
+        break;
+      case CardType.shield:
+        _log('${p.name} drew Shield.');
+        if (h.shield == 0) {
+          h.shield = 1;
+          h.acts.add(c);
+        } else {
+          s.discard.add(c);
+          _log('${p.name} already has a Shield. Discarded.');
+        }
+        break;
     }
+  }
+
+  /// Steal takes the highest number the thief does not already hold.
+  GameCard? _stealPick(int me, int t) {
+    final mine = s.players[me].hand.nums;
+    final theirs = [...s.players[t].hand.nums]..sort((a, b) => b.v - a.v);
+    for (final c in theirs) {
+      if (!mine.any((x) => x.v == c.v)) return c;
+    }
+    return null;
+  }
+
+  /// Swap trades my lowest number for their highest, when that is an
+  /// upgrade and neither side ends up with a duplicate. Returns [mine, theirs].
+  List<GameCard>? _swapPick(int me, int t) {
+    final mine = [...s.players[me].hand.nums]..sort((a, b) => a.v - b.v);
+    final theirs = [...s.players[t].hand.nums]..sort((a, b) => b.v - a.v);
+    for (final th in theirs) {
+      if (mine.any((x) => x.v == th.v)) continue;
+      for (final m in mine) {
+        if (m.v >= th.v) break;
+        if (!theirs.any((x) => x.v == m.v)) return [m, th];
+      }
+    }
+    return null;
   }
 
   void _ask(int chooser, String kind, List<int> cands, GameCard card) {
@@ -299,6 +378,17 @@ class Engine {
   void _resolve(int chooser, String kind, int t, GameCard card) {
     final tp = s.players[t];
     final name = s.players[chooser].name;
+    final me = s.players[chooser];
+    // A Shield stops one card another player aims at you.
+    if (kind != 'give' && t != chooser && tp.hand.shield > 0) {
+      tp.hand.shield--;
+      final k = tp.hand.acts.indexWhere((a) => a.t == CardType.shield);
+      if (k >= 0) s.discard.add(tp.hand.acts.removeAt(k));
+      s.discard.add(card);
+      _log("${tp.name}'s Shield blocked $name's ${card.label}.");
+      _emit('shield', t, 0);
+      return;
+    }
     switch (kind) {
       case 'give':
         tp.hand.sc = 1;
@@ -322,6 +412,43 @@ class Engine {
         s.flips.add(FlipTask(t, 3));
         _log('$name made ${_who(chooser, t)} flip 3 cards.');
         break;
+      case 'minus':
+        tp.hand.mods.add(card);
+        _log('$name put ${card.label} on ${_who(chooser, t)}.');
+        break;
+      case 'div2':
+        tp.hand.mods.add(card);
+        _log('$name halved the numbers of ${_who(chooser, t)}.');
+        break;
+      case 'onemore':
+        tp.hand.acts.add(card);
+        s.flips.add(FlipTask(t, 1, stay: true));
+        _log('$name gave ${_who(chooser, t)} One More: one card, then stop.');
+        break;
+      case 'steal':
+        final pick = _stealPick(chooser, t);
+        s.discard.add(card);
+        if (pick != null) {
+          tp.hand.nums.remove(pick);
+          me.hand.nums.add(pick);
+          _log('$name stole the ${pick.v} from ${tp.name}.');
+          if (me.hand.nums.length == 7) {
+            _log('$name has seven different numbers: +15!');
+            _emit('seven', chooser, 0);
+          }
+        }
+        break;
+      case 'swap':
+        final pair = _swapPick(chooser, t);
+        s.discard.add(card);
+        if (pair != null) {
+          me.hand.nums.remove(pair[0]);
+          tp.hand.nums.remove(pair[1]);
+          me.hand.nums.add(pair[1]);
+          tp.hand.nums.add(pair[0]);
+          _log('$name swapped their ${pair[0].v} for the ${pair[1].v} of ${tp.name}.');
+        }
+        break;
     }
   }
 
@@ -337,7 +464,8 @@ class Engine {
     _log('Round ${s.round} is over.');
     final maxTotal = s.players.map((p) => p.total).reduce(max);
     final leaders = [for (var i = 0; i < n; i++) if (s.players[i].total == maxTotal) i];
-    if (maxTotal >= s.target && leaders.length == 1) {
+    final lastRound = s.maxRounds > 0 && s.round >= s.maxRounds;
+    if ((maxTotal >= s.target && leaders.length == 1) || lastRound) {
       s.phase = 'gameOver';
       s.winner = leaders.first;
       _log('${s.players[leaders.first].name} wins with $maxTotal!');

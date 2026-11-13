@@ -1,7 +1,8 @@
 // Data model for 1More. Everything here serializes to plain JSON so the
 // host can broadcast the full game state to other players.
 
-enum CardType { num, add, x2, sc, flip3, freeze, neg }
+// New types go at the end: the index is what travels between devices.
+enum CardType { num, add, x2, sc, flip3, freeze, neg, div2, minus, steal, swap, onemore, shield }
 
 int _int(dynamic v) => (v as num).toInt();
 
@@ -31,6 +32,18 @@ class GameCard {
         return 'Freeze';
       case CardType.neg:
         return 'Negative';
+      case CardType.div2:
+        return '÷2';
+      case CardType.minus:
+        return '−$v';
+      case CardType.steal:
+        return 'Steal';
+      case CardType.swap:
+        return 'Swap';
+      case CardType.onemore:
+        return 'One More';
+      case CardType.shield:
+        return 'Shield';
     }
   }
 
@@ -52,6 +65,7 @@ class RoundHand {
   List<GameCard> mods;
   List<GameCard> acts;
   int sc;
+  int shield;
   bool neg;
   PStatus status;
   int drawn;
@@ -62,6 +76,7 @@ class RoundHand {
     List<GameCard>? mods,
     List<GameCard>? acts,
     this.sc = 0,
+    this.shield = 0,
     this.neg = false,
     this.status = PStatus.active,
     this.drawn = 0,
@@ -79,6 +94,7 @@ class RoundHand {
         'm': mods.map((c) => c.toJson()).toList(),
         'a': acts.map((c) => c.toJson()).toList(),
         'sc': sc,
+        'sh': shield,
         'neg': neg,
         'st': status.index,
         'dr': drawn,
@@ -92,6 +108,7 @@ class RoundHand {
       mods: _cards(m['m']),
       acts: _cards(m['a']),
       sc: _int(m['sc']),
+      shield: m['sh'] == null ? 0 : _int(m['sh']),
       neg: m['neg'] as bool,
       status: PStatus.values[_int(m['st'])],
       drawn: _int(m['dr']),
@@ -168,10 +185,19 @@ Score scoreOf(RoundHand h) {
     v *= 2;
     parts.add('×2 = $v');
   }
+  if (h.mods.any((c) => c.t == CardType.div2)) {
+    v = v ~/ 2;
+    parts.add('÷2 = $v');
+  }
   final adds = h.mods.where((c) => c.t == CardType.add).fold<int>(0, (a, c) => a + c.v);
   if (adds > 0) {
     v += adds;
     parts.add('+$adds');
+  }
+  final minus = h.mods.where((c) => c.t == CardType.minus).fold<int>(0, (a, c) => a + c.v);
+  if (minus > 0) {
+    v -= minus;
+    parts.add('−$minus');
   }
   if (h.nums.length >= 7) {
     v += 15;
@@ -220,9 +246,13 @@ class Decision {
 class FlipTask {
   final int target;
   int remaining;
-  FlipTask(this.target, this.remaining);
-  Map<String, dynamic> toJson() => {'t': target, 'r': remaining};
-  static FlipTask fromJson(dynamic j) => FlipTask(_int((j as Map)['t']), _int(j['r']));
+
+  /// One More: the player must stop once these draws are done.
+  final bool stay;
+  FlipTask(this.target, this.remaining, {this.stay = false});
+  Map<String, dynamic> toJson() => {'t': target, 'r': remaining, 's': stay};
+  static FlipTask fromJson(dynamic j) =>
+      FlipTask(_int((j as Map)['t']), _int(j['r']), stay: j['s'] == true);
 }
 
 class RoundResult {
@@ -258,8 +288,11 @@ class GameState {
   int? lastCardId;
   int version;
 
-  /// 0 = every card, 1 = no action cards, 2 = number cards only.
+  /// 0 = every card, 1 = no action cards, 2 = number cards only, 3 = chaos.
   int deckMode;
+
+  /// The game ends after this many rounds (0 = play to the target).
+  int maxRounds;
 
   /// The latest moment worth a big on-screen callout (a bust, a save).
   int evId;
@@ -287,6 +320,7 @@ class GameState {
     this.lastCardId,
     this.version = 0,
     this.deckMode = 0,
+    this.maxRounds = 0,
     this.evId = 0,
     this.evType,
     this.evPlayer = 0,
@@ -324,6 +358,7 @@ class GameState {
       if (lastCardId != null) 'last': lastCardId,
       'ver': version,
       'dm': deckMode,
+      'mr': maxRounds,
       'ev': [evId, evType ?? '', evPlayer, evValue],
     };
   }
@@ -350,6 +385,7 @@ class GameState {
       lastCardId: m['last'] == null ? null : _int(m['last']),
       version: _int(m['ver']),
       deckMode: m['dm'] == null ? 0 : _int(m['dm']),
+      maxRounds: m['mr'] == null ? 0 : _int(m['mr']),
       evId: m['ev'] == null ? 0 : _int((m['ev'] as List)[0]),
       evType: m['ev'] == null || (m['ev'] as List)[1] == '' ? null : (m['ev'] as List)[1] as String,
       evPlayer: m['ev'] == null ? 0 : _int((m['ev'] as List)[2]),
